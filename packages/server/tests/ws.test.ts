@@ -263,6 +263,44 @@ describe("WebSocket relay — integration tests", () => {
     guestWs.close();
   });
 
+  test("message size limit enforced by byte length, not character count", async () => {
+    const hostWs = connectAs("host-token-123");
+    await waitForOpen(hostWs);
+
+    const guestWs = connectAs("guest-token-456");
+    await waitForOpen(guestWs);
+    await waitForMessage(hostWs); // consume 'joined'
+
+    // Each emoji (e.g. 🎉) is 4 bytes in UTF-8 but 2 UTF-16 code units.
+    // 25601 emoji × 4 bytes = 102404 bytes > 100KB, but only 51202 UTF-16 code units.
+    const closePromise = waitForClose(hostWs);
+    const emoji = "🎉";
+    const count = Math.ceil((100 * 1024 + 1) / Buffer.byteLength(emoji, "utf8"));
+    const bigContent = emoji.repeat(count);
+    expect(bigContent.length).toBeLessThan(100 * 1024); // under limit by character count
+    expect(Buffer.byteLength(bigContent, "utf8")).toBeGreaterThan(100 * 1024); // over limit by byte length
+    hostWs.send(JSON.stringify({ type: "message", content: bigContent }));
+    const close = await closePromise;
+    expect(close.code).toBe(1009);
+
+    guestWs.close();
+  });
+
+  test("rejects duplicate connection for same role", async () => {
+    const hostWs1 = connectAs("host-token-123");
+    await waitForOpen(hostWs1);
+
+    // Second connection with the same host token should be rejected (409)
+    const hostWs2 = connectAs("host-token-123");
+    const close = await waitForClose(hostWs2);
+    expect(close.code).not.toBe(1000);
+
+    // Original connection should still be open
+    expect(hostWs1.readyState).toBe(WebSocket.OPEN);
+
+    hostWs1.close();
+  });
+
   test("rejects connection to closed room", async () => {
     closeRoom(db, "ROOM01", "closed");
 
