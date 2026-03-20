@@ -33,6 +33,10 @@ export function handleUpgrade(
     return new Response("Room is no longer available", { status: 410 });
   }
 
+  if (roomManager.getConnection(result.room.id, result.role)) {
+    return new Response("Role already connected", { status: 409 });
+  }
+
   const wsData: WsData = { roomId, role: result.role };
 
   const upgraded = server.upgrade(req, { data: wsData });

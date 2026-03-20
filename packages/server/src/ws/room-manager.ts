@@ -80,7 +80,7 @@ export class RoomManager {
   }
 
   handleMessage(roomId: string, senderRole: Sender, content: string): boolean {
-    if (content.length > MAX_MESSAGE_SIZE) {
+    if (Buffer.byteLength(content, "utf8") > MAX_MESSAGE_SIZE) {
       return false;
     }
 
