@@ -1,5 +1,8 @@
 node_modules/
 dist/
 *.db
+*.db-shm
+*.db-wal
 *.tsbuildinfo
 .agent.lock
+.claude/
