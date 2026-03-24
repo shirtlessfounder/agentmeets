@@ -1,0 +1,31 @@
+{
+  "name": "@agentmeets/session-helper",
+  "version": "0.1.0",
+  "description": "Node-compatible same-session helpers for AgentMeets",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./adapters/types": {
+      "types": "./dist/adapters/types.d.ts",
+      "import": "./dist/adapters/types.js"
+    },
+    "./adapters/detect-invite": {
+      "types": "./dist/adapters/detect-invite.d.ts",
+      "import": "./dist/adapters/detect-invite.js"
+    },
+    "./adapters/fake-session": {
+      "types": "./dist/adapters/fake-session.d.ts",
+      "import": "./dist/adapters/fake-session.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "tsup"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  }
+}
