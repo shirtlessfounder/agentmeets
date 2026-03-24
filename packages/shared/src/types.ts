@@ -29,6 +29,17 @@ export interface Room {
   id: string;
   host_token: string;
   guest_token: string | null;
+  status: RoomStatus;
+  created_at: string;
+  joined_at: string | null;
+  closed_at: string | null;
+  close_reason: CloseReason | null;
+}
+
+export interface StoredRoom {
+  id: string;
+  host_token: string;
+  guest_token: string | null;
   status: StoredRoomStatus;
   created_at: string;
   joined_at: string | null;

@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import type { Sender, Room, ServerMessage } from "@agentmeets/shared";
+import type { Room, Sender, StoredRoom, ServerMessage } from "@agentmeets/shared";
 import { initializeSchema } from "../src/db/schema.js";
 import { createRoom, joinRoom, closeRoom, getRoomByToken } from "../src/db/rooms.js";
 import { RoomManager } from "../src/ws/room-manager.js";
@@ -14,7 +14,18 @@ function createTestDb(): Database {
   return db;
 }
 
-function setupRoom(db: Database): Room {
+const _publicRoomContractCheck = {
+  id: "ROOM01",
+  host_token: "host-token-123",
+  guest_token: null,
+  status: "waiting_for_join",
+  created_at: "2026-03-24 00:00:00",
+  joined_at: null,
+  closed_at: null,
+  close_reason: null,
+} satisfies Room;
+
+function setupRoom(db: Database): StoredRoom {
   const room = createRoom(db, "ROOM01", "host-token-123");
   return joinRoom(db, "ROOM01", "guest-token-456");
 }
@@ -166,7 +177,7 @@ describe("WebSocket relay — integration tests", () => {
       }),
     );
 
-    const ack = (await ackPromise) as Record<string, unknown>;
+    const ack = (await ackPromise) as unknown as Record<string, unknown>;
     expect(ack).toMatchObject({
       type: "ack",
       clientMessageId: "host-msg-1",
@@ -175,7 +186,7 @@ describe("WebSocket relay — integration tests", () => {
     expect(typeof ack.messageId).toBe("number");
     expect(typeof ack.createdAt).toBe("string");
 
-    const msg = (await msgPromise) as Record<string, unknown>;
+    const msg = (await msgPromise) as unknown as Record<string, unknown>;
     expect(msg).toMatchObject({
       type: "message",
       sender: "host",
@@ -218,7 +229,7 @@ describe("WebSocket relay — integration tests", () => {
       }),
     );
 
-    const ack = (await ackPromise) as Record<string, unknown>;
+    const ack = (await ackPromise) as unknown as Record<string, unknown>;
     expect(ack).toMatchObject({
       type: "ack",
       clientMessageId: "guest-msg-1",
@@ -227,7 +238,7 @@ describe("WebSocket relay — integration tests", () => {
     expect(typeof ack.messageId).toBe("number");
     expect(typeof ack.createdAt).toBe("string");
 
-    const msg = (await msgPromise) as Record<string, unknown>;
+    const msg = (await msgPromise) as unknown as Record<string, unknown>;
     expect(msg).toMatchObject({
       type: "message",
       sender: "guest",
@@ -255,7 +266,7 @@ describe("WebSocket relay — integration tests", () => {
       }),
     );
 
-    const msg = (await errorPromise) as Record<string, unknown>;
+    const msg = (await errorPromise) as unknown as Record<string, unknown>;
     expect(msg).toMatchObject({
       type: "error",
       code: "invalid_message",
@@ -282,7 +293,7 @@ describe("WebSocket relay — integration tests", () => {
     expect(msg).toEqual({ type: "ended", reason: "user_ended" });
 
     // Verify room was closed in DB
-    const room = db.prepare("SELECT * FROM rooms WHERE id = ?").get("ROOM01") as Room;
+    const room = db.prepare("SELECT * FROM rooms WHERE id = ?").get("ROOM01") as StoredRoom;
     expect(room.status).toBe("closed");
     expect(room.close_reason).toBe("user_ended");
   });

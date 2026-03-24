@@ -1,27 +1,27 @@
 import { Database } from "bun:sqlite";
-import type { Room, StoredCloseReason, Sender } from "@agentmeets/shared";
+import type { StoredRoom, StoredCloseReason, Sender } from "@agentmeets/shared";
 
 export function createRoom(
   db: Database,
   id: string,
   hostToken: string,
-): Room {
+): StoredRoom {
   const stmt = db.prepare(
     `INSERT INTO rooms (id, host_token, status) VALUES (?, ?, 'waiting') RETURNING *`,
   );
-  return stmt.get(id, hostToken) as Room;
+  return stmt.get(id, hostToken) as StoredRoom;
 }
 
-export function getRoom(db: Database, id: string): Room | null {
+export function getRoom(db: Database, id: string): StoredRoom | null {
   const stmt = db.prepare(`SELECT * FROM rooms WHERE id = ?`);
-  return (stmt.get(id) as Room) ?? null;
+  return (stmt.get(id) as StoredRoom) ?? null;
 }
 
 export function joinRoom(
   db: Database,
   id: string,
   guestToken: string,
-): Room {
+): StoredRoom {
   const room = getRoom(db, id);
   if (!room) {
     throw new Error("Room not found");
@@ -36,7 +36,7 @@ export function joinRoom(
   const stmt = db.prepare(
     `UPDATE rooms SET guest_token = ?, status = 'active', joined_at = datetime('now') WHERE id = ? RETURNING *`,
   );
-  return stmt.get(guestToken, id) as Room;
+  return stmt.get(guestToken, id) as StoredRoom;
 }
 
 export function closeRoom(
@@ -60,11 +60,11 @@ export function expireRoom(db: Database, id: string): void {
 export function getRoomByToken(
   db: Database,
   token: string,
-): { room: Room; role: Sender } | null {
+): { room: StoredRoom; role: Sender } | null {
   const stmt = db.prepare(
     `SELECT * FROM rooms WHERE host_token = ? OR guest_token = ?`,
   );
-  const room = stmt.get(token, token) as Room | undefined;
+  const room = stmt.get(token, token) as StoredRoom | undefined;
   if (!room) return null;
 
   const role: Sender = room.host_token === token ? "host" : "guest";

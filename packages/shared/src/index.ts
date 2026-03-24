@@ -1,5 +1,6 @@
 export type {
   Room,
+  StoredRoom,
   RoomStatus,
   CloseReason,
   StoredRoomStatus,
