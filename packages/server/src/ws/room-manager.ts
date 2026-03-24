@@ -1,7 +1,7 @@
 import type { Sender, CloseReason, ServerMessage } from "@agentmeets/shared";
 import type { ServerWebSocket } from "bun";
 import { Database } from "bun:sqlite";
-import { closeRoom, saveMessage } from "../db/index.js";
+import { activateRoom, closeRoom, saveMessage } from "../db/index.js";
 
 export interface WsData {
   roomId: string;
@@ -186,6 +186,7 @@ export class RoomManager {
     room.isActive = true;
     clearTimeout(room.timers.join);
     room.timers.join = undefined;
+    activateRoom(this.db, roomId);
 
     sendJson(room.host, { type: "room_active" });
     sendJson(room.guest, { type: "room_active" });

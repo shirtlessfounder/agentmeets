@@ -16,23 +16,74 @@ beforeEach(() => {
 });
 
 describe("POST /rooms", () => {
-  test("returns 201 with roomId and hostToken", async () => {
-    const res = await app.request("/rooms", { method: "POST" });
+  test("returns 400 when openingMessage is missing", async () => {
+    const res = await app.request("/rooms", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_opening_message");
+  });
+
+  test("returns 400 when openingMessage is blank", async () => {
+    const res = await app.request("/rooms", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ openingMessage: "   " }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_opening_message");
+  });
+
+  test("returns 201 with roomId, hostToken, and absolute inviteUrl", async () => {
+    const res = await app.request("http://agentmeets.test/rooms", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ openingMessage: "Opening hello" }),
+    });
     expect(res.status).toBe(201);
     const body = await res.json();
     expect(body.roomId).toMatch(/^[A-Z0-9]{6}$/);
     expect(body.hostToken).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
     );
+    expect(body.inviteUrl).toMatch(/^http:\/\/agentmeets\.test\/j\/[A-Za-z0-9_-]+$/);
   });
 
-  test("creates room in database", async () => {
-    const res = await app.request("/rooms", { method: "POST" });
+  test("creates room with the opening message persisted as the first host message", async () => {
+    const res = await app.request("/rooms", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ openingMessage: "Opening hello" }),
+    });
+
+    expect(res.status).toBe(201);
     const body = await res.json();
-    const stmt = db.prepare("SELECT * FROM rooms WHERE id = ?");
-    const room = stmt.get(body.roomId) as { id: string; status: string };
+    const room = db
+      .prepare("SELECT id, status, opening_message_id FROM rooms WHERE id = ?")
+      .get(body.roomId) as {
+      id: string;
+      status: string;
+      opening_message_id: number | null;
+    };
     expect(room).not.toBeNull();
     expect(room.status).toBe("waiting");
+
+    const messages = db
+      .prepare("SELECT id, sender, content FROM messages WHERE room_id = ? ORDER BY id ASC")
+      .all(body.roomId) as Array<{ id: number; sender: string; content: string }>;
+    expect(messages).toEqual([
+      {
+        id: room.opening_message_id!,
+        sender: "host",
+        content: "Opening hello",
+      },
+    ]);
   });
 });
 

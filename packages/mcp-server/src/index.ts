@@ -10,6 +10,8 @@ const env =
   }).process?.env ?? {};
 const SERVER_URL =
   env.AGENTMEETS_URL?.replace(/\/$/, "") || "http://localhost:3000";
+const DEFAULT_OPENING_MESSAGE =
+  env.AGENTMEETS_DEFAULT_OPENING_MESSAGE || "Ready when you are.";
 
 const sendAndWaitInputSchema = {
   message: z.string().describe("Message to send"),
@@ -128,7 +130,14 @@ const createMeetHandler = async () => {
 
   let res: Response;
   try {
-    res = await fetch(`${SERVER_URL}/rooms`, { method: "POST" });
+    res = await fetch(`${SERVER_URL}/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        // Temporary compatibility until create_meet accepts a caller-provided opening message.
+        openingMessage: DEFAULT_OPENING_MESSAGE,
+      }),
+    });
   } catch (err) {
     return errorResult(`Cannot reach server at ${SERVER_URL}: ${err}`);
   }

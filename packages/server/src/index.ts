@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { createDatabase } from "./db/index.js";
 import { RoomManager, createWebSocketHandlers, handleUpgrade } from "./ws/index.js";
 import type { WsData } from "./ws/index.js";
+import { inviteRoutes } from "./routes/invites.js";
 import { roomRoutes } from "./routes/rooms.js";
 
 export function createServer(port = 3000) {
@@ -12,6 +13,7 @@ export function createServer(port = 3000) {
 
   app.get("/health", (c) => c.json({ status: "ok" }));
   app.route("/", roomRoutes(db));
+  app.route("/", inviteRoutes(db));
 
   const server = Bun.serve<WsData>({
     port,

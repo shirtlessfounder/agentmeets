@@ -5,11 +5,32 @@ export function createRoom(
   db: Database,
   id: string,
   hostToken: string,
+  openingMessage?: string,
 ): StoredRoom {
-  const stmt = db.prepare(
-    `INSERT INTO rooms (id, host_token, status) VALUES (?, ?, 'waiting') RETURNING *`,
+  if (!openingMessage) {
+    const stmt = db.prepare(
+      `INSERT INTO rooms (id, host_token, status) VALUES (?, ?, 'waiting') RETURNING *`,
+    );
+    return stmt.get(id, hostToken) as StoredRoom;
+  }
+
+  const insertRoom = db.prepare(
+    `INSERT INTO rooms (id, host_token, status) VALUES (?, ?, 'waiting')`,
   );
-  return stmt.get(id, hostToken) as StoredRoom;
+  const insertOpeningMessage = db.prepare(
+    `INSERT INTO messages (room_id, sender, content) VALUES (?, 'host', ?) RETURNING id`,
+  );
+  const linkOpeningMessage = db.prepare(
+    `UPDATE rooms SET opening_message_id = ? WHERE id = ?`,
+  );
+  const selectRoom = db.prepare(`SELECT * FROM rooms WHERE id = ?`);
+
+  return db.transaction(() => {
+    insertRoom.run(id, hostToken);
+    const message = insertOpeningMessage.get(id, openingMessage) as { id: number };
+    linkOpeningMessage.run(message.id, id);
+    return selectRoom.get(id) as StoredRoom;
+  })();
 }
 
 export function getRoom(db: Database, id: string): StoredRoom | null {
@@ -37,6 +58,31 @@ export function joinRoom(
     `UPDATE rooms SET guest_token = ?, status = 'active', joined_at = datetime('now') WHERE id = ? RETURNING *`,
   );
   return stmt.get(guestToken, id) as StoredRoom;
+}
+
+export function activateRoom(db: Database, id: string): StoredRoom {
+  const room = getRoom(db, id);
+  if (!room) {
+    throw new Error("Room not found");
+  }
+  if (room.status === "expired" || room.status === "closed") {
+    throw new Error(`Room is ${room.status}`);
+  }
+  if (room.status === "active") {
+    return room;
+  }
+  if (room.guest_token === null) {
+    throw new Error("Room has no guest");
+  }
+
+  const stmt = db.prepare(
+    `UPDATE rooms
+     SET status = 'active',
+         joined_at = COALESCE(joined_at, datetime('now'))
+     WHERE id = ?
+     RETURNING *`,
+  );
+  return stmt.get(id) as StoredRoom;
 }
 
 export function closeRoom(
