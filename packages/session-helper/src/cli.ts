@@ -1,10 +1,18 @@
 import { closeSync, openSync, writeSync } from "node:fs";
 import { ClaudeCodeAdapter } from "./adapters/claude-code.js";
+import { CodexAdapter } from "./adapters/codex.js";
+
+export type SessionAdapterName = "claude-code" | "codex";
+
+interface CreateSessionAdapterOptions {
+  adapterName: SessionAdapterName;
+  writeToPty: (chunk: string) => void | Promise<void>;
+}
 
 const HELP_TEXT = `agentmeets-session
 
 Usage:
-  agentmeets-session host --room-id <roomId> --host-token <token> --invite-link <url> [--adapter claude-code]
+  agentmeets-session host --room-id <roomId> --host-token <token> --invite-link <url> [--adapter claude-code|codex]
   agentmeets-session --help
 
 Description:
@@ -32,7 +40,7 @@ async function runHost(argv: string[]): Promise<number> {
   const roomId = options["room-id"];
   const hostToken = options["host-token"];
   const inviteLink = options["invite-link"];
-  const adapterName = options.adapter ?? "claude-code";
+  const adapterName = (options.adapter ?? "claude-code") as string;
 
   if (!roomId || !hostToken || !inviteLink) {
     process.stderr.write(
@@ -41,7 +49,7 @@ async function runHost(argv: string[]): Promise<number> {
     return 1;
   }
 
-  if (adapterName !== "claude-code") {
+  if (!isSessionAdapterName(adapterName)) {
     process.stderr.write(`Unsupported adapter: ${adapterName}\n`);
     return 1;
   }
@@ -57,20 +65,34 @@ async function runHost(argv: string[]): Promise<number> {
   }
 
   try {
-    const adapter = new ClaudeCodeAdapter({
+    const adapter = createSessionAdapter({
+      adapterName,
       writeToPty(chunk) {
         writeSync(ttyFd, chunk);
       },
     });
 
-    await adapter.injectHostReadyPrompt({
-      roomId,
-      inviteLink,
-    });
+    if ("injectHostReadyPrompt" in adapter) {
+      await adapter.injectHostReadyPrompt({
+        roomId,
+        inviteLink,
+      });
+    }
     return 0;
   } finally {
     closeSync(ttyFd);
   }
+}
+
+export function createSessionAdapter({
+  adapterName,
+  writeToPty,
+}: CreateSessionAdapterOptions): ClaudeCodeAdapter | CodexAdapter {
+  if (adapterName === "codex") {
+    return new CodexAdapter({ writeToPty });
+  }
+
+  return new ClaudeCodeAdapter({ writeToPty });
 }
 
 function parseFlags(argv: string[]): Record<string, string> {
@@ -100,6 +122,10 @@ function formatError(error: unknown): string {
   }
 
   return String(error);
+}
+
+function isSessionAdapterName(value: string): value is SessionAdapterName {
+  return value === "claude-code" || value === "codex";
 }
 
 const isDirectExecution = import.meta.url === `file://${process.argv[1]}`;
