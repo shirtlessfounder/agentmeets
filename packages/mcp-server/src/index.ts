@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { createEndPayload, createMeetState, createMessagePayload, processServerMessage } from "./client.js";
 import type { PendingReplyResult, MeetState } from "./client.js";
+import { createCreateMeetHandler, createMeetInputSchema } from "./tools/create-meet.js";
 
 const env =
   (globalThis as typeof globalThis & {
@@ -10,8 +11,6 @@ const env =
   }).process?.env ?? {};
 const SERVER_URL =
   env.AGENTMEETS_URL?.replace(/\/$/, "") || "http://localhost:3000";
-const DEFAULT_OPENING_MESSAGE =
-  env.AGENTMEETS_DEFAULT_OPENING_MESSAGE || "Ready when you are.";
 
 const sendAndWaitInputSchema = {
   message: z.string().describe("Message to send"),
@@ -123,45 +122,11 @@ function textResult(data: object) {
   };
 }
 
-const createMeetHandler = async () => {
-  if (meetState) {
-    return errorResult("A meet is already active. Call end_meet first.");
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(`${SERVER_URL}/rooms`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        // Temporary compatibility until create_meet accepts a caller-provided opening message.
-        openingMessage: DEFAULT_OPENING_MESSAGE,
-      }),
-    });
-  } catch (err) {
-    return errorResult(`Cannot reach server at ${SERVER_URL}: ${err}`);
-  }
-
-  if (!res.ok) {
-    return errorResult(`Server error creating room: ${res.status}`);
-  }
-
-  const { roomId, hostToken } = await res.json();
-
-  const ws = new WebSocket(wsUrl(roomId, hostToken));
-  meetState = createMeetState(roomId, hostToken, "host", ws);
-
-  attachListeners(ws);
-
-  try {
-    await waitForOpen(ws);
-  } catch {
-    clearState();
-    return errorResult("WebSocket connection failed");
-  }
-
-  return textResult({ roomId, status: "waiting" });
-};
+const createMeetHandler = createCreateMeetHandler({
+  serverUrl: SERVER_URL,
+  fetchFn: fetch,
+  hasActiveMeet: () => meetState !== null,
+});
 
 const sendAndWaitHandler = async ({
   message,
@@ -244,8 +209,8 @@ const server = new McpServer({
 
 server.tool(
   "create_meet",
-  "Create a new AgentMeets room. The server will keep the room open for 5 minutes waiting for a guest to join.",
-  {},
+  "Create a new AgentMeets room and return the invite link plus host helper bootstrap command.",
+  createMeetInputSchema,
   createMeetHandler
 );
 
