@@ -6,6 +6,7 @@ export default defineConfig({
     "src/adapters/detect-invite.ts",
     "src/adapters/fake-session.ts",
   ],
+  dts: true,
   format: "esm",
   target: "node18",
   outDir: "dist",
