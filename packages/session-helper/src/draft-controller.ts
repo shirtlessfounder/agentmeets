@@ -18,7 +18,7 @@ export interface CreateDraftControllerOptions {
 
 export interface DraftController {
   getSnapshot(): SessionHelperState;
-  resetDraftMode(nextMode: DraftMode): void;
+  resumeAutoMode(): DraftControllerEvent[];
   applyCountdownResult(result: CountdownResult): DraftControllerEvent;
   beginSend(content: string): SessionMessagePayload;
   processServerMessage(message: SessionServerMessage): DraftControllerEvent[];
@@ -36,8 +36,23 @@ export function createDraftController({
     getSnapshot() {
       return cloneSessionHelperState(state);
     },
-    resetDraftMode(nextMode) {
-      state.draftMode = nextMode;
+    resumeAutoMode() {
+      const events: DraftControllerEvent[] = [];
+
+      if (state.draftMode !== "auto") {
+        state.draftMode = "auto";
+        events.push({
+          kind: "draft_mode_changed",
+          draftMode: "auto",
+          reason: "manual_complete",
+        });
+      }
+
+      if (!state.pendingClientMessageId) {
+        events.push(...releaseQueuedInbound(state));
+      }
+
+      return events;
     },
     applyCountdownResult(result) {
       state.draftMode = "manual";
@@ -77,7 +92,7 @@ export function createDraftController({
           return [];
         case "message":
           state.lastReceivedMessageId = message.messageId;
-          if (state.pendingClientMessageId) {
+          if (shouldQueueInbound(state)) {
             state.queuedInbound.push({ ...message });
             return [
               {
@@ -107,7 +122,7 @@ export function createDraftController({
               ackMessageId: message.messageId,
               clientMessageId: message.clientMessageId,
             },
-            ...releaseQueuedInbound(state),
+            ...(state.draftMode === "auto" ? releaseQueuedInbound(state) : []),
           ];
         case "error":
           return finalize(state, {
@@ -123,6 +138,10 @@ export function createDraftController({
       }
     },
   };
+}
+
+function shouldQueueInbound(state: SessionHelperState): boolean {
+  return state.pendingClientMessageId !== null || state.draftMode === "manual";
 }
 
 function releaseQueuedInbound(
@@ -145,4 +164,3 @@ function finalize(
   state.terminal = terminal;
   return [terminal];
 }
-

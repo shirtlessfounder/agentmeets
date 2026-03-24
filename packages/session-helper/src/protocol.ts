@@ -85,7 +85,10 @@ export interface SessionHelperState {
   terminal: TerminalState | null;
 }
 
-export type DraftModeChangeReason = "interrupted" | "fallback_timeout";
+export type DraftModeChangeReason =
+  | "interrupted"
+  | "fallback_timeout"
+  | "manual_complete";
 
 export type DraftControllerEvent =
   | {
@@ -135,4 +138,3 @@ export function cloneSessionHelperState(
     terminal: state.terminal ? { ...state.terminal } : null,
   };
 }
-

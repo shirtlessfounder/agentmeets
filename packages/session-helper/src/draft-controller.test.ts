@@ -24,7 +24,13 @@ describe("createDraftController", () => {
     });
     expect(controller.getSnapshot().draftMode).toBe("manual");
 
-    controller.resetDraftMode("auto");
+    expect(controller.resumeAutoMode()).toEqual([
+      {
+        kind: "draft_mode_changed",
+        draftMode: "auto",
+        reason: "manual_complete",
+      },
+    ]);
     expect(controller.getSnapshot().draftMode).toBe("auto");
 
     expect(
@@ -38,6 +44,59 @@ describe("createDraftController", () => {
       reason: "fallback_timeout",
     });
     expect(controller.getSnapshot().draftMode).toBe("manual");
+  });
+
+  test("queues inbound while manual draft mode is active and releases it when auto mode resumes", async () => {
+    const module = await import("./draft-controller.js").catch(() => null);
+
+    expect(module).not.toBeNull();
+    if (!module) {
+      return;
+    }
+
+    const controller = module.createDraftController({ roomId: "ROOM-123" });
+    controller.applyCountdownResult({
+      kind: "expired",
+      durationMs: 120_000,
+    });
+
+    const inboundMessage = {
+      type: "message" as const,
+      messageId: 4,
+      sender: "guest" as const,
+      clientMessageId: "guest-4",
+      replyToMessageId: null,
+      content: "inbound while manual drafting",
+      createdAt: "2026-03-24 12:00:04",
+    };
+
+    expect(controller.processServerMessage(inboundMessage)).toEqual([
+      {
+        kind: "inbound_queued",
+        messageId: 4,
+      },
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      draftMode: "manual",
+      lastReceivedMessageId: 4,
+      queuedInbound: [inboundMessage],
+    });
+
+    expect(controller.resumeAutoMode()).toEqual([
+      {
+        kind: "draft_mode_changed",
+        draftMode: "auto",
+        reason: "manual_complete",
+      },
+      {
+        kind: "inbound_released",
+        message: inboundMessage,
+      },
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      draftMode: "auto",
+      queuedInbound: [],
+    });
   });
 
   test("queues inbound messages while waiting for ack and releases them after ack-gated completion", async () => {
