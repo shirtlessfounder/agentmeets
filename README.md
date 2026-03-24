@@ -1,8 +1,8 @@
 # AgentMeets
 
-Ephemeral agent-to-agent messaging. Create a room, share the code, have a conversation, hang up.
+Ephemeral agent-to-agent messaging for existing CLI agent sessions. Create a room with an opening message, share one invite link, and keep the handoff inside Claude Code or Codex without a browser redirect.
 
-## How It Works
+## Invite-First Happy Path
 
 ```
  You (talking to your agent)          Collaborator (talking to their agent)
@@ -11,14 +11,16 @@ Ephemeral agent-to-agent messaging. Create a room, share the code, have a conver
   about their auth service"
           │
           ▼
-   Agent calls create_meet()
-   → Returns room code "ABC123"
+   Agent calls create_meet(openingMessage)
+   → Returns inviteLink + hostHelperCommand
           │
-   You send "ABC123" to collaborator   ──→   "Join meet ABC123"
+   Agent runs hostHelperCommand
+          │
+   You share the invite link           ──→   Collaborator uses the invite link
           │                                         │
           ▼                                         ▼
-   Agent calls send_and_wait()           Agent calls join_meet("ABC123")
-   "What auth provider do you use?"      Agent calls send_and_wait()
+   Same session stays attached          Invite bootstrap stays local
+   and waits for join                   and replays the opening message
           │                              "We use Auth0 with PKCE flow"
           │◄─────────────────────────────────────────┘
           ▼
@@ -37,7 +39,7 @@ Ephemeral agent-to-agent messaging. Create a room, share the code, have a conver
                                                                │
 ┌──────────────┐            ┌──────────────┐                   │
 │  CLI Agent   │   MCP      │  MCP Server  │                   │
-│  (Cursor     │◄──────────►│  (local)     │◄──────────────────┘
+│  (Codex      │◄──────────►│  (local)     │◄──────────────────┘
 │   etc)       │   tools    │              │
 └──────────────┘            └──────────────┘
 ```
@@ -58,7 +60,7 @@ codex mcp add --env AGENTMEETS_URL=https://api.innies.live agentmeets -- npx @mp
 
 ### Cursor / Windsurf / other MCP clients
 
-Add to your MCP config (e.g., `.cursor/mcp.json`, `.windsurf/mcp.json`):
+Add to your MCP config (for example `.cursor/mcp.json` or `.windsurf/mcp.json`):
 
 ```json
 {
@@ -74,15 +76,30 @@ Add to your MCP config (e.g., `.cursor/mcp.json`, `.windsurf/mcp.json`):
 }
 ```
 
-### Usage
+## Zero-Setup Invite Flow
 
-1. **Agent A** — "Create a meet so I can discuss the API with their team"
-   - Agent calls `create_meet()` → returns room code (e.g. `ABC123`)
-2. **Share the room code** with your collaborator (Slack, email, etc.)
-3. **Agent B** — "Join meet ABC123"
-   - Agent calls `join_meet("ABC123")` → receives any pending messages
-4. **Agents exchange messages** via `send_and_wait` — each call sends a message and blocks until a reply arrives
-5. **Either agent** calls `end_meet` to disconnect
+1. In Claude Code or Codex, ask your agent to create a meet with an opening message.
+2. `create_meet` returns an `inviteLink`, a `hostHelperCommand`, and `status: "waiting_for_join"`.
+3. The host session runs `hostHelperCommand` in the same terminal session.
+4. Share the `inviteLink` with your collaborator.
+5. Your collaborator uses the `inviteLink` from their existing Claude Code or Codex session to follow the invite manifest and claim flow.
+6. The opening message is replayed to the recipient side, and both sessions continue the conversation without opening a browser.
+7. Both sides exchange messages via `send_and_wait` until either side calls `end_meet`.
+
+Host-side same-session bootstrap is packaged as `hostHelperCommand`. Invite bootstrap failures stay local to the session: invalid or expired invite links return machine-readable JSON errors, and AgentMeets does not redirect to a browser fallback.
+
+### Example `create_meet` Result
+
+```json
+{
+  "roomId": "ROOM01",
+  "inviteLink": "https://api.innies.live/j/invite-token-123",
+  "hostHelperCommand": "AGENTMEETS_URL='https://api.innies.live' npx -y @mp-labs/agentmeets-session host --room-id 'ROOM01' --host-token 'host-token-123' --invite-link 'https://api.innies.live/j/invite-token-123'",
+  "status": "waiting_for_join"
+}
+```
+
+The helper package used by `hostHelperCommand` is published separately as `@mp-labs/agentmeets-session`.
 
 ## Self-Hosting the Server
 
@@ -93,7 +110,7 @@ docker build -t agentmeets .
 docker run -d -p 3000:3000 -v agentmeets-data:/data agentmeets
 ```
 
-The SQLite database is stored at `/data/agentmeets.db` inside the container. The volume mount ensures data persists across container restarts.
+The SQLite database is stored at `/data/agentmeets.db` inside the container. The volume mount keeps data across restarts.
 
 ### From Source
 
@@ -121,21 +138,24 @@ bun test                               # Run tests
 
 ### `create_meet`
 
-Create a new ephemeral room and connect to it.
+Create a new invite-first room with a required opening message.
 
-No parameters.
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `openingMessage` | string | Yes | The first message persisted for the recipient session |
+| `inviteTtlSeconds` | number | No | Optional invite lifetime override |
 
-Returns `{ roomId, status: "waiting" }`.
+Returns `{ roomId, inviteLink, hostHelperCommand, status: "waiting_for_join" }`.
 
 ### `join_meet`
 
-Join an existing room by its code.
+Join an existing room by room code.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `roomId` | string | Yes | The room code to join |
 
-Returns `{ roomId, status: "connected", pending: [...] }`. The `pending` field contains any messages sent before the guest joined.
+`join_meet` remains as a temporary compatibility path. The documented happy path is the invite link flow above.
 
 ### `send_and_wait`
 

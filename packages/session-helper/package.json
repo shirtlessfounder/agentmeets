@@ -1,7 +1,7 @@
 {
   "name": "@mp-labs/agentmeets-session",
   "version": "0.1.0",
-  "description": "Node-compatible runtime helpers for AgentMeets sessions",
+  "description": "Zero-setup same-session helpers for AgentMeets invite flows",
   "type": "module",
   "main": "dist/client.js",
   "types": "dist/client.d.ts",
@@ -55,7 +55,8 @@
   },
   "scripts": {
     "build": "tsup",
-    "prepublishOnly": "tsup"
+    "prepack": "bun run build",
+    "prepublishOnly": "bun run build"
   },
   "publishConfig": {
     "access": "public"

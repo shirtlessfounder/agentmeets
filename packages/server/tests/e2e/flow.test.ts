@@ -4,6 +4,10 @@ import { createTestDatabase, TestAgent, JoinError } from "./helpers.js";
 import { createRoom, getRoom } from "../../src/db/rooms.js";
 import { getMessages } from "../../src/db/messages.js";
 import { expireRoom } from "../../src/db/rooms.js";
+import {
+  createSessionAdapter,
+  type SessionAdapterName,
+} from "../../../session-helper/src/cli.js";
 
 let db: Database;
 
@@ -14,6 +18,18 @@ beforeEach(() => {
 afterEach(() => {
   db.close();
 });
+
+function createAdapterHarness(adapterName: SessionAdapterName) {
+  const writes: string[] = [];
+  const adapter = createSessionAdapter({
+    adapterName,
+    writeToPty(chunk) {
+      writes.push(String(chunk));
+    },
+  });
+
+  return { adapter, writes };
+}
 
 describe("happy path — full conversation", () => {
   test("create → join → exchange messages → end", async () => {
@@ -69,6 +85,117 @@ describe("happy path — full conversation", () => {
     const roomFinal = getRoom(db, roomId)!;
     expect(roomFinal.status).toBe("closed");
     expect(roomFinal.close_reason).toBe("user_ended");
+  });
+});
+
+describe("mixed-client helper integration", () => {
+  test("Claude Code host + Codex guest preserve native prompt formatting on both sides", async () => {
+    const host = createAdapterHarness("claude-code");
+    const guest = createAdapterHarness("codex");
+
+    await guest.adapter.injectRemoteMessage({
+      remoteRole: "host",
+      content: "Opening context from the Claude host.",
+    });
+    await host.adapter.injectRemoteMessage({
+      remoteRole: "guest",
+      content: "Reply from the Codex guest.",
+    });
+
+    expect(guest.writes).toEqual([
+      [
+        "[agentmeets codex remote-message]",
+        "remote_role=host",
+        "draft_command=/draft <message>",
+        "---",
+        "Opening context from the Claude host.",
+        "",
+      ].join("\n"),
+    ]);
+
+    expect(host.writes).toEqual([
+      [
+        "[agentmeets remote-message]",
+        "remote-role: guest",
+        "message:",
+        "Reply from the Codex guest.",
+        "submit-final-draft: /draft <message>",
+        "",
+      ].join("\n"),
+    ]);
+  });
+
+  test("Codex host + Claude Code guest preserve native prompt formatting on both sides", async () => {
+    const host = createAdapterHarness("codex");
+    const guest = createAdapterHarness("claude-code");
+
+    await guest.adapter.injectRemoteMessage({
+      remoteRole: "host",
+      content: "Opening context from the Codex host.",
+    });
+    await host.adapter.injectRemoteMessage({
+      remoteRole: "guest",
+      content: "Reply from the Claude guest.",
+    });
+
+    expect(guest.writes).toEqual([
+      [
+        "[agentmeets remote-message]",
+        "remote-role: host",
+        "message:",
+        "Opening context from the Codex host.",
+        "submit-final-draft: /draft <message>",
+        "",
+      ].join("\n"),
+    ]);
+
+    expect(host.writes).toEqual([
+      [
+        "[agentmeets codex remote-message]",
+        "remote_role=guest",
+        "draft_command=/draft <message>",
+        "---",
+        "Reply from the Claude guest.",
+        "",
+      ].join("\n"),
+    ]);
+  });
+
+  test("draft mode keeps the same regenerate/end semantics on both clients", async () => {
+    for (const adapterName of ["claude-code", "codex"] as const) {
+      const { adapter, writes } = createAdapterHarness(adapterName);
+
+      await adapter.enterDraftMode({
+        originalDraft: "Initial shared draft.",
+        workingDraft: "Initial shared draft.",
+      });
+
+      expect(adapter.routeDraftCommand("/regenerate")).toEqual({
+        kind: "regenerate_draft",
+        originalDraft: "Initial shared draft.",
+        workingDraft: "Initial shared draft.",
+      });
+
+      await adapter.enterDraftMode({
+        originalDraft: "This replacement must be ignored.",
+        workingDraft: "Tighter second pass.",
+      });
+
+      expect(adapter.routeDraftCommand("/regenerate")).toEqual({
+        kind: "regenerate_draft",
+        originalDraft: "Initial shared draft.",
+        workingDraft: "Tighter second pass.",
+      });
+      expect(adapter.routeDraftCommand("/end")).toEqual({
+        kind: "end_session",
+      });
+
+      expect(writes[0]).toContain("/regenerate");
+      expect(writes[0]).toContain("/end");
+      expect(writes[0]).toContain("Initial shared draft.");
+      expect(writes[1]).toContain("Initial shared draft.");
+      expect(writes[1]).toContain("Tighter second pass.");
+    }
   });
 });
 

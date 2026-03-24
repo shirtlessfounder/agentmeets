@@ -1,13 +1,12 @@
-name: Publish MCP Server
+name: Publish Session Helper
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/publish-mcp.yml"
-      - "packages/mcp-server/**"
-      - "packages/shared/**"
+      - ".github/workflows/publish-session-helper.yml"
+      - "packages/session-helper/**"
       - "package.json"
       - "tsconfig.base.json"
       - "bun.lock"
@@ -32,15 +31,15 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build
-        working-directory: packages/mcp-server
+        working-directory: packages/session-helper
         run: bun run build
 
       - name: Pack smoke test
-        working-directory: packages/mcp-server
+        working-directory: packages/session-helper
         run: npm pack --dry-run
 
       - name: Publish (if version changed)
-        working-directory: packages/mcp-server
+        working-directory: packages/session-helper
         run: npx can-npm-publish && npm publish --provenance || echo "Version already published, skipping."
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

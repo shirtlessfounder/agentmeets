@@ -197,4 +197,53 @@ describe("invite flow", () => {
     hostWs.close();
     guestWs.close();
   });
+
+  test("invite-link bootstrap failures surface locally as JSON without any browser redirect fallback", async () => {
+    const baseUrl = `http://localhost:${port}`;
+
+    const missingManifest = await fetch(`${baseUrl}/j/not-a-real-invite`);
+    expect(missingManifest.status).toBe(404);
+    expect(missingManifest.headers.get("content-type")).toContain("application/json");
+    expect(missingManifest.headers.get("location")).toBeNull();
+    expect(await missingManifest.json()).toEqual({
+      error: "invite_not_found",
+    });
+
+    const createResponse = await fetch(`${baseUrl}/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ openingMessage: "This invite should expire before bootstrap." }),
+    });
+    expect(createResponse.status).toBe(201);
+
+    const created = (await createResponse.json()) as {
+      roomId: string;
+      inviteUrl: string;
+    };
+    const inviteToken = new URL(created.inviteUrl).pathname.split("/").pop()!;
+
+    db.prepare("UPDATE invites SET expires_at = ? WHERE room_id = ?").run(
+      new Date(Date.now() - 60_000).toISOString(),
+      created.roomId,
+    );
+
+    const expiredManifest = await fetch(`${baseUrl}/j/${inviteToken}`);
+    expect(expiredManifest.status).toBe(410);
+    expect(expiredManifest.headers.get("content-type")).toContain("application/json");
+    expect(expiredManifest.headers.get("location")).toBeNull();
+    expect(await expiredManifest.json()).toEqual({
+      error: "invite_expired",
+    });
+
+    const expiredClaim = await fetch(`${baseUrl}/invites/${inviteToken}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": "expired-bootstrap-claim" },
+    });
+    expect(expiredClaim.status).toBe(410);
+    expect(expiredClaim.headers.get("content-type")).toContain("application/json");
+    expect(expiredClaim.headers.get("location")).toBeNull();
+    expect(await expiredClaim.json()).toEqual({
+      error: "invite_expired",
+    });
+  });
 });
