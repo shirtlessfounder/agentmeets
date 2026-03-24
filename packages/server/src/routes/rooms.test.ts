@@ -85,6 +85,47 @@ describe("POST /rooms", () => {
       },
     ]);
   });
+
+  test("uses inviteTtlSeconds when issuing the invite", async () => {
+    const before = Date.now();
+    const res = await app.request("/rooms", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        openingMessage: "Opening hello",
+        inviteTtlSeconds: 900,
+      }),
+    });
+    const after = Date.now();
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    const invite = db
+      .prepare("SELECT expires_at FROM invites WHERE room_id = ?")
+      .get(body.roomId) as { expires_at: string };
+
+    expect(new Date(invite.expires_at).getTime()).toBeGreaterThanOrEqual(
+      before + 900_000,
+    );
+    expect(new Date(invite.expires_at).getTime()).toBeLessThanOrEqual(
+      after + 900_000,
+    );
+  });
+
+  test("returns 400 when inviteTtlSeconds is invalid", async () => {
+    const res = await app.request("/rooms", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        openingMessage: "Opening hello",
+        inviteTtlSeconds: 0,
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_invite_ttl_seconds");
+  });
 });
 
 describe("POST /rooms/:id/join", () => {
