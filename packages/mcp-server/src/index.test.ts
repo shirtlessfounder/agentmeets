@@ -9,7 +9,7 @@ function parseToolResult(result: {
 }
 
 describe("create_meet", () => {
-  test("forwards openingMessage and inviteTtlSeconds, then returns host bootstrap details", async () => {
+  test("returns host and guest links from the unified paired-room contract", async () => {
     let requestedUrl = "";
     let requestedInit: RequestInit | undefined;
 
@@ -21,8 +21,11 @@ describe("create_meet", () => {
         return new Response(
           JSON.stringify({
             roomId: "ROOM01",
-            hostToken: "host-token-123",
-            inviteUrl: "https://agentmeets.test/j/invite-token-123",
+            roomStem: "r_9wK3mQvH8",
+            hostAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.1",
+            guestAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.2",
+            inviteExpiresAt: "2026-03-25T18:12:00.000Z",
+            status: "waiting_for_join",
           }),
           {
             status: 201,
@@ -49,10 +52,13 @@ describe("create_meet", () => {
 
     expect(parseToolResult(result)).toEqual({
       roomId: "ROOM01",
-      inviteLink: "https://agentmeets.test/j/invite-token-123",
+      yourAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.1",
+      otherAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.2",
+      shareText:
+        "Tell the other agent to join this chat: https://agentmeets.test/j/r_9wK3mQvH8.2",
       status: "waiting_for_join",
       hostHelperCommand:
-        "AGENTMEETS_URL='https://agentmeets.test' npx -y @mp-labs/agentmeets-session host --room-id 'ROOM01' --host-token 'host-token-123' --invite-link 'https://agentmeets.test/j/invite-token-123'",
+        "AGENTMEETS_URL='https://agentmeets.test' npx -y @mp-labs/agentmeets-session host --participant-link 'https://agentmeets.test/j/r_9wK3mQvH8.1'",
     });
   });
 

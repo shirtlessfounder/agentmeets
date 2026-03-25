@@ -29,8 +29,11 @@ interface CreateMeetArgs {
 
 interface CreateRoomResponse {
   roomId: string;
-  hostToken: string;
-  inviteUrl: string;
+  roomStem: string;
+  hostAgentLink: string;
+  guestAgentLink: string;
+  inviteExpiresAt: string;
+  status: "waiting_for_join";
 }
 
 type ToolResult = CallToolResult;
@@ -76,36 +79,30 @@ export function createCreateMeetHandler({
     }
 
     const data = (await res.json()) as CreateRoomResponse;
-    const inviteLink = data.inviteUrl;
-
     return textResult({
       roomId: data.roomId,
-      inviteLink,
+      yourAgentLink: data.hostAgentLink,
+      otherAgentLink: data.guestAgentLink,
+      shareText: `Tell the other agent to join this chat: ${data.guestAgentLink}`,
       hostHelperCommand: buildHostHelperCommand({
         serverUrl,
-        roomId: data.roomId,
-        hostToken: data.hostToken,
-        inviteLink,
+        participantLink: data.hostAgentLink,
         sessionHelperPackageName,
       }),
-      status: "waiting_for_join",
+      status: data.status,
     });
   };
 }
 
 export interface BuildHostHelperCommandOptions {
   serverUrl: string;
-  roomId: string;
-  hostToken: string;
-  inviteLink: string;
+  participantLink: string;
   sessionHelperPackageName?: string;
 }
 
 export function buildHostHelperCommand({
   serverUrl,
-  roomId,
-  hostToken,
-  inviteLink,
+  participantLink,
   sessionHelperPackageName = DEFAULT_SESSION_HELPER_PACKAGE,
 }: BuildHostHelperCommandOptions): string {
   return [
@@ -114,12 +111,8 @@ export function buildHostHelperCommand({
     "-y",
     sessionHelperPackageName,
     "host",
-    "--room-id",
-    quoteShellArg(roomId),
-    "--host-token",
-    quoteShellArg(hostToken),
-    "--invite-link",
-    quoteShellArg(inviteLink),
+    "--participant-link",
+    quoteShellArg(participantLink),
   ].join(" ");
 }
 
