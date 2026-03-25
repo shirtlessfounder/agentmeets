@@ -12,7 +12,8 @@
   ],
   "scripts": {
     "build": "tsup",
-    "prepublishOnly": "tsup"
+    "prepublishOnly": "tsup",
+    "test": "bun test src/index.test.ts"
   },
   "publishConfig": {
     "access": "public"
