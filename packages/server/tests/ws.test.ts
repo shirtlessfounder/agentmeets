@@ -221,6 +221,54 @@ describe("WebSocket relay — integration tests", () => {
     guestWs.close();
   });
 
+  test("guest receives all persisted host messages that were accepted before activation", async () => {
+    const roomId = "ROOM03";
+    createRoom(db, roomId, "host-token-790", "Opening context.");
+    db.prepare("UPDATE rooms SET guest_token = ? WHERE id = ?").run(
+      "guest-token-988",
+      roomId,
+    );
+
+    const hostWs = connectAs("host-token-790", roomId);
+    await waitForOpen(hostWs);
+
+    const hostAckPromise = waitForMessage(hostWs);
+    hostWs.send(
+      JSON.stringify({
+        type: "message",
+        clientMessageId: "prejoin-host-1",
+        replyToMessageId: null,
+        content: "Additional context before you join.",
+      }),
+    );
+
+    expect(await hostAckPromise).toMatchObject({
+      type: "ack",
+      clientMessageId: "prejoin-host-1",
+    });
+
+    const guestWs = connectAs("guest-token-988", roomId);
+    await waitForOpen(guestWs);
+
+    expect(await waitForMessage(hostWs)).toEqual({ type: "room_active" });
+    expect(await waitForMessage(guestWs)).toEqual({ type: "room_active" });
+
+    expect(await waitForMessage(guestWs)).toMatchObject({
+      type: "message",
+      sender: "host",
+      content: "Opening context.",
+    });
+    expect(await waitForMessage(guestWs)).toMatchObject({
+      type: "message",
+      sender: "host",
+      content: "Additional context before you join.",
+    });
+
+    roomManager.cleanupRoom(roomId);
+    hostWs.close();
+    guestWs.close();
+  });
+
   test("sender receives ack and receiver gets enriched message", async () => {
     const hostWs = connectAs("host-token-123");
     await waitForOpen(hostWs);

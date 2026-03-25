@@ -2,7 +2,7 @@ import type { Sender, CloseReason, ServerMessage } from "@agentmeets/shared";
 import type { ServerWebSocket } from "bun";
 import { Database } from "bun:sqlite";
 import { activateRoom, closeRoom, expireRoom, saveMessage } from "../db/index.js";
-import { getOpeningMessage } from "../db/messages.js";
+import { getMessages } from "../db/messages.js";
 
 export interface WsData {
   roomId: string;
@@ -210,7 +210,7 @@ export class RoomManager {
 
     sendJson(room.host, { type: "room_active" });
     sendJson(room.guest, { type: "room_active" });
-    this.replayOpeningMessage(roomId, room.guest);
+    this.replayPendingMessages(roomId, room.guest);
 
     this.resetIdleTimeout(roomId);
   }
@@ -225,19 +225,21 @@ export class RoomManager {
     }, this.idleTimeoutMs);
   }
 
-  private replayOpeningMessage(roomId: string, guest: ServerWebSocket<WsData>): void {
-    const openingMessage = getOpeningMessage(this.db, roomId);
-    if (!openingMessage) return;
-
-    sendJson(guest, {
-      type: "message",
-      messageId: openingMessage.id,
-      sender: "host",
-      clientMessageId: `persisted:${openingMessage.id}`,
-      replyToMessageId: null,
-      content: openingMessage.content,
-      createdAt: openingMessage.created_at,
-    });
+  private replayPendingMessages(roomId: string, guest: ServerWebSocket<WsData>): void {
+    const pendingMessages = getMessages(this.db, roomId).filter(
+      (message) => message.sender === "host",
+    );
+    for (const message of pendingMessages) {
+      sendJson(guest, {
+        type: "message",
+        messageId: message.id,
+        sender: "host",
+        clientMessageId: `persisted:${message.id}`,
+        replyToMessageId: null,
+        content: message.content,
+        createdAt: message.created_at,
+      });
+    }
   }
 
   private getInviteExpiry(roomId: string): Date | null {
