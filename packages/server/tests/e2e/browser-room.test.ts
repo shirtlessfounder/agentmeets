@@ -231,4 +231,59 @@ describe("browser room presentation", () => {
     expect(room.status).toBe("waiting");
     expect(room.guest_token).toEqual(expect.any(String));
   });
+
+  test("claimed invite sessions can still activate after the original invite TTL elapses", async () => {
+    const baseUrl = `http://localhost:${port}`;
+
+    const createResponse = await fetch(`${baseUrl}/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        openingMessage: "Claim first, connect later.",
+        inviteTtlSeconds: 1,
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+
+    const created = (await createResponse.json()) as {
+      roomId: string;
+      hostAgentLink: string;
+      guestAgentLink: string;
+    };
+    const hostInviteToken = new URL(created.hostAgentLink).pathname.split("/").pop()!;
+    const guestInviteToken = new URL(created.guestAgentLink).pathname.split("/").pop()!;
+
+    const hostClaimResponse = await fetch(`${baseUrl}/invites/${hostInviteToken}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": "claimed-host-after-expiry" },
+    });
+    expect(hostClaimResponse.status).toBe(200);
+    const hostClaim = (await hostClaimResponse.json()) as { sessionToken: string };
+
+    const guestClaimResponse = await fetch(`${baseUrl}/invites/${guestInviteToken}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": "claimed-guest-after-expiry" },
+    });
+    expect(guestClaimResponse.status).toBe(200);
+    const guestClaim = (await guestClaimResponse.json()) as { sessionToken: string };
+
+    await Bun.sleep(1_100);
+
+    const hostWs = new WebSocket(
+      `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${hostClaim.sessionToken}`,
+    );
+    await waitForOpen(hostWs);
+
+    const guestWs = new WebSocket(
+      `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${guestClaim.sessionToken}`,
+    );
+    await waitForOpen(guestWs);
+
+    expect(await waitForMessage(hostWs)).toEqual({ type: "room_active" });
+    expect(await waitForMessage(guestWs)).toEqual({ type: "room_active" });
+
+    hostWs.close();
+    guestWs.close();
+  });
+
 });

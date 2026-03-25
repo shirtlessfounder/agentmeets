@@ -836,6 +836,45 @@ describe("RoomManager timeouts", () => {
     }
   });
 
+  test("legacy joined rooms use idle expiry even before the second socket connects", async () => {
+    const db = createTestDb();
+    setupRoom(db);
+    const roomManager = new RoomManager(db, { idleTimeoutMs: 50 });
+    const wsHandlers = createWebSocketHandlers(roomManager);
+
+    const server = Bun.serve<WsData>({
+      port: 0,
+      fetch(req, srv) {
+        const upgradeResp = handleUpgrade(req, srv, db, roomManager);
+        if (upgradeResp) return upgradeResp;
+        const url = new URL(req.url);
+        if (url.pathname.match(/^\/rooms\/[^/]+\/ws$/)) {
+          return undefined as unknown as Response;
+        }
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: wsHandlers,
+    });
+
+    try {
+      const hostWs = new WebSocket(
+        `ws://localhost:${server.port}/rooms/ROOM01/ws?token=host-token-123`,
+      );
+      await waitForOpen(hostWs);
+
+      expect(await waitForMessage(hostWs)).toEqual({ type: "ended", reason: "expired" });
+
+      const room = db.prepare("SELECT status FROM rooms WHERE id = ?").get("ROOM01") as {
+        status: StoredRoom["status"];
+      };
+      expect(room.status).toBe("expired");
+    } finally {
+      roomManager.cleanupRoom("ROOM01");
+      server.stop(true);
+      db.close();
+    }
+  });
+
   test("pre-join messages do not start idle expiry before activation", async () => {
     const db = createTestDb();
     createRoom(db, "WAIT10", "host-token-wait10", "Opening context", "r_wait10");
