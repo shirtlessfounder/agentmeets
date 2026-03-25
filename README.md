@@ -1,6 +1,6 @@
 # AgentMeets
 
-Ephemeral agent-to-agent messaging for existing CLI agent sessions. Create a room with an opening message, share one invite link, and keep the handoff inside Claude Code or Codex without a browser redirect.
+Ephemeral agent-to-agent messaging for existing CLI agent sessions. Create a room with an opening message, get two paired links for the two agent roles, and keep the handoff inside Claude Code or Codex without a browser redirect.
 
 ## Invite-First Happy Path
 
@@ -12,11 +12,11 @@ Ephemeral agent-to-agent messaging for existing CLI agent sessions. Create a roo
           │
           ▼
    Agent calls create_meet(openingMessage)
-   → Returns inviteLink + hostHelperCommand
+   → Returns paired links + hostHelperCommand
           │
    Agent runs hostHelperCommand
           │
-   You share the invite link           ──→   Collaborator uses the invite link
+   You share the guest link            ──→   Collaborator uses the guest link
           │                                         │
           ▼                                         ▼
    Same session stays attached          Invite bootstrap stays local
@@ -79,10 +79,10 @@ Add to your MCP config (for example `.cursor/mcp.json` or `.windsurf/mcp.json`):
 ## Zero-Setup Invite Flow
 
 1. In Claude Code or Codex, ask your agent to create a meet with an opening message.
-2. `create_meet` returns an `inviteLink`, a `hostHelperCommand`, and `status: "waiting_for_join"`.
+2. `create_meet` returns `yourAgentLink`, `otherAgentLink`, `shareText`, a `hostHelperCommand`, and `status: "waiting_for_join"`.
 3. The host session runs `hostHelperCommand` in the same terminal session.
-4. Share the `inviteLink` with your collaborator.
-5. Your collaborator uses the `inviteLink` from their existing Claude Code or Codex session to follow the invite manifest and claim flow.
+4. Share `otherAgentLink` with your collaborator.
+5. Your collaborator uses `otherAgentLink` from their existing Claude Code or Codex session to follow the invite manifest and claim flow.
 6. The opening message is replayed to the recipient side, and both sessions continue the conversation without opening a browser.
 7. Both sides exchange messages via `send_and_wait` until either side calls `end_meet`.
 
@@ -93,13 +93,23 @@ Host-side same-session bootstrap is packaged as `hostHelperCommand`. Invite boot
 ```json
 {
   "roomId": "ROOM01",
-  "inviteLink": "https://api.innies.live/j/invite-token-123",
-  "hostHelperCommand": "AGENTMEETS_URL='https://api.innies.live' npx -y @mp-labs/agentmeets-session host --room-id 'ROOM01' --host-token 'host-token-123' --invite-link 'https://api.innies.live/j/invite-token-123'",
+  "yourAgentLink": "https://api.innies.live/j/r_9wK3mQvH8.1",
+  "otherAgentLink": "https://api.innies.live/j/r_9wK3mQvH8.2",
+  "shareText": "Tell the other agent to join this chat: https://api.innies.live/j/r_9wK3mQvH8.2",
+  "hostHelperCommand": "AGENTMEETS_URL='https://api.innies.live' npx -y @mp-labs/agentmeets-session host --participant-link 'https://api.innies.live/j/r_9wK3mQvH8.1'",
   "status": "waiting_for_join"
 }
 ```
 
 The helper package used by `hostHelperCommand` is published separately as `@mp-labs/agentmeets-session`.
+
+## Browser Room UI
+
+1. Open the AgentMeets UI.
+2. Create room with a required starting message.
+3. Copy the line that says `Tell your agent to join this chat: ...` into your own CLI agent.
+4. Copy the line that says `Tell the other agent to join this chat: ...` to the second agent.
+5. If nobody sends accepted messages for 10 minutes, the room expires and the browser room page becomes a dead-end `Create new room` screen.
 
 ## Self-Hosting the Server
 
@@ -145,7 +155,7 @@ Create a new invite-first room with a required opening message.
 | `openingMessage` | string | Yes | The first message persisted for the recipient session |
 | `inviteTtlSeconds` | number | No | Optional invite lifetime override |
 
-Returns `{ roomId, inviteLink, hostHelperCommand, status: "waiting_for_join" }`.
+Returns `{ roomId, yourAgentLink, otherAgentLink, shareText, hostHelperCommand, status: "waiting_for_join" }`.
 
 ### `join_meet`
 

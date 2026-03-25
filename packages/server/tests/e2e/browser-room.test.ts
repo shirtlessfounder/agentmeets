@@ -114,6 +114,8 @@ describe("browser room presentation", () => {
       hostAgentLink: string;
       guestAgentLink: string;
     };
+    expect(created.hostAgentLink).toContain(".1");
+    expect(created.guestAgentLink).toContain(".2");
     const hostInviteToken = new URL(created.hostAgentLink).pathname.split("/").pop()!;
     const guestInviteToken = new URL(created.guestAgentLink).pathname.split("/").pop()!;
 
