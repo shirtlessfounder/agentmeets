@@ -27,10 +27,13 @@ export type Sender = "host" | "guest";
 
 export interface Room {
   id: string;
+  room_stem: string | null;
   host_token: string;
   guest_token: string | null;
   status: RoomStatus;
+  opening_message_id?: number | null;
   created_at: string;
+  last_activity_at?: string | null;
   joined_at: string | null;
   closed_at: string | null;
   close_reason: CloseReason | null;
@@ -38,10 +41,13 @@ export interface Room {
 
 export interface StoredRoom {
   id: string;
+  room_stem: string | null;
   host_token: string;
   guest_token: string | null;
   status: StoredRoomStatus;
+  opening_message_id?: number | null;
   created_at: string;
+  last_activity_at?: string | null;
   joined_at: string | null;
   closed_at: string | null;
   close_reason: StoredCloseReason | null;

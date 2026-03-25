@@ -7,10 +7,18 @@ export function saveMessage(
   sender: Sender,
   content: string,
 ): Message {
-  const stmt = db.prepare(
+  const insertMessage = db.prepare(
     `INSERT INTO messages (room_id, sender, content) VALUES (?, ?, ?) RETURNING *`,
   );
-  return stmt.get(roomId, sender, content) as Message;
+  const touchRoom = db.prepare(
+    `UPDATE rooms SET last_activity_at = datetime('now') WHERE id = ?`,
+  );
+
+  return db.transaction(() => {
+    const message = insertMessage.get(roomId, sender, content) as Message;
+    touchRoom.run(roomId);
+    return message;
+  })();
 }
 
 export function getMessages(db: Database, roomId: string): Message[] {

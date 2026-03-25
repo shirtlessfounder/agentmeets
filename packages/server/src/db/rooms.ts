@@ -6,17 +6,30 @@ export function createRoom(
   id: string,
   hostToken: string,
   openingMessage?: string,
+  roomStem?: string,
 ): StoredRoom {
   if (!openingMessage) {
+    if (roomStem) {
+      const stmt = db.prepare(
+        `INSERT INTO rooms (id, room_stem, host_token, status)
+         VALUES (?, ?, ?, 'waiting')
+         RETURNING *`,
+      );
+      return stmt.get(id, roomStem, hostToken) as StoredRoom;
+    }
+
     const stmt = db.prepare(
       `INSERT INTO rooms (id, host_token, status) VALUES (?, ?, 'waiting') RETURNING *`,
     );
     return stmt.get(id, hostToken) as StoredRoom;
   }
 
-  const insertRoom = db.prepare(
-    `INSERT INTO rooms (id, host_token, status) VALUES (?, ?, 'waiting')`,
-  );
+  const insertRoom = roomStem
+    ? db.prepare(
+        `INSERT INTO rooms (id, room_stem, host_token, status)
+         VALUES (?, ?, ?, 'waiting')`,
+      )
+    : db.prepare(`INSERT INTO rooms (id, host_token, status) VALUES (?, ?, 'waiting')`);
   const insertOpeningMessage = db.prepare(
     `INSERT INTO messages (room_id, sender, content) VALUES (?, 'host', ?) RETURNING id`,
   );
@@ -26,7 +39,11 @@ export function createRoom(
   const selectRoom = db.prepare(`SELECT * FROM rooms WHERE id = ?`);
 
   return db.transaction(() => {
-    insertRoom.run(id, hostToken);
+    if (roomStem) {
+      insertRoom.run(id, roomStem, hostToken);
+    } else {
+      insertRoom.run(id, hostToken);
+    }
     const message = insertOpeningMessage.get(id, openingMessage) as { id: number };
     linkOpeningMessage.run(message.id, id);
     return selectRoom.get(id) as StoredRoom;

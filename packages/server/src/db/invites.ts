@@ -1,19 +1,23 @@
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
-import type { RoomStatus } from "@agentmeets/shared";
+import type { RoomStatus, Sender } from "@agentmeets/shared";
 import { expireRoom } from "./rooms.js";
 
 const DEFAULT_INVITE_TTL_MS = 5 * 60 * 1000;
 
 interface InviteLookupRow {
   room_id: string;
+  room_stem: string | null;
   room_status: string;
+  host_token: string;
   guest_token: string | null;
   joined_at: string | null;
+  participant_role: Sender;
   opening_message: string | null;
   expires_at: string;
   claimed_at: string | null;
   claim_idempotency_key: string | null;
+  claim_session_token: string | null;
   claim_guest_token: string | null;
 }
 
@@ -26,7 +30,9 @@ export interface InviteManifest {
 
 export interface InviteClaimResult {
   roomId: string;
-  guestToken: string;
+  role: Sender;
+  sessionToken: string;
+  guestToken?: string;
   status: "activating";
 }
 
@@ -48,8 +54,14 @@ export function createInvite(
   expiresAt: string = new Date(Date.now() + DEFAULT_INVITE_TTL_MS).toISOString(),
 ): { expiresAt: string } {
   db.prepare(
-    `INSERT INTO invites (room_id, token_hash, expires_at) VALUES (?, ?, ?)`,
-  ).run(roomId, hashInviteToken(inviteToken), expiresAt);
+    `INSERT INTO invites (room_id, participant_role, token_hash, expires_at)
+     VALUES (?, ?, ?, ?)`,
+  ).run(
+    roomId,
+    deriveParticipantRoleFromToken(inviteToken),
+    hashInviteToken(inviteToken),
+    expiresAt,
+  );
 
   return { expiresAt };
 }
@@ -88,8 +100,13 @@ export function claimInvite(
 
     if (record.claimed_at !== null) {
       if (record.claim_idempotency_key === idempotencyKey) {
-        const guestToken = record.claim_guest_token ?? record.guest_token;
-        if (!guestToken) {
+        const sessionToken =
+          record.claim_session_token
+          ?? (record.participant_role === "host"
+            ? record.host_token
+            : record.claim_guest_token
+              ?? record.guest_token);
+        if (!sessionToken) {
           throw new InviteError(
             "Invite claim state is invalid",
             500,
@@ -99,7 +116,9 @@ export function claimInvite(
 
         return {
           roomId: record.room_id,
-          guestToken,
+          role: record.participant_role,
+          sessionToken,
+          ...(record.participant_role === "guest" ? { guestToken: sessionToken } : {}),
           status: "activating" as const,
         };
       }
@@ -113,7 +132,7 @@ export function claimInvite(
 
     ensureInviteUsable(db, record);
 
-    if (record.guest_token !== null) {
+    if (record.participant_role === "guest" && record.guest_token !== null) {
       throw new InviteError(
         "Invite has already been claimed",
         409,
@@ -121,31 +140,40 @@ export function claimInvite(
       );
     }
 
-    const guestToken = crypto.randomUUID();
+    const sessionToken =
+      record.participant_role === "host"
+        ? record.host_token
+        : (record.guest_token ?? crypto.randomUUID());
     const claimedAt = new Date().toISOString();
 
-    db.prepare(
-      `UPDATE rooms
-       SET guest_token = ?
-       WHERE id = ?`,
-    ).run(guestToken, record.room_id);
+    if (record.participant_role === "guest") {
+      db.prepare(
+        `UPDATE rooms
+         SET guest_token = ?
+         WHERE id = ?`,
+      ).run(sessionToken, record.room_id);
+    }
 
     db.prepare(
       `UPDATE invites
        SET claimed_at = ?,
            claim_idempotency_key = ?,
+           claim_session_token = ?,
            claim_guest_token = ?
        WHERE token_hash = ?`,
     ).run(
       claimedAt,
       idempotencyKey,
-      guestToken,
+      sessionToken,
+      record.participant_role === "guest" ? sessionToken : null,
       hashInviteToken(inviteToken),
     );
 
     return {
       roomId: record.room_id,
-      guestToken,
+      role: record.participant_role,
+      sessionToken,
+      ...(record.participant_role === "guest" ? { guestToken: sessionToken } : {}),
       status: "activating" as const,
     };
   })();
@@ -159,9 +187,12 @@ function getInviteLookup(
     .prepare(
       `SELECT
          i.room_id,
+         r.room_stem,
          r.status AS room_status,
+         r.host_token,
          r.guest_token,
          r.joined_at,
+         i.participant_role,
          COALESCE(
            opening_message.content,
            (
@@ -176,6 +207,7 @@ function getInviteLookup(
          i.expires_at,
          i.claimed_at,
          i.claim_idempotency_key,
+         i.claim_session_token,
          i.claim_guest_token
        FROM invites i
        JOIN rooms r ON r.id = i.room_id
@@ -220,4 +252,12 @@ function deriveInviteStatus(record: InviteLookupRow): RoomStatus {
 
 function hashInviteToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function deriveParticipantRoleFromToken(token: string): Sender {
+  if (token.endsWith(".1")) {
+    return "host";
+  }
+
+  return "guest";
 }
