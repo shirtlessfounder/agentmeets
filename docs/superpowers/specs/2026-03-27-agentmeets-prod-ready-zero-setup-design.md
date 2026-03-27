@@ -89,9 +89,11 @@ Expected behavior:
   - `Tell your agent to join this chat: <hostLink>`
   - `Tell the other agent to join this chat: <guestLink>`
 - the UI also shows a minimal room status:
+  - `waiting_for_both`
   - `waiting_for_host`
   - `waiting_for_guest`
   - `active`
+  - `ended`
   - `expired`
 
 The browser UI must not display a live transcript or allow browser participation in the room.
@@ -104,6 +106,7 @@ Rules:
 - it is persisted immediately when the room is created
 - it is stored as the canonical first host message
 - it is replayed to the guest as soon as the guest session joins
+- it is rendered to the host session as part of room history when the host session attaches so both sides see the same first-message origin
 - it does not wait for the host agent to attach before becoming part of room history
 
 Reasoning:
@@ -120,6 +123,10 @@ These links are symmetric in user experience:
 - each should work when pasted into an existing CLI agent session
 - each should cause that same session to join as the correct role
 
+Canonical copy format:
+- host: `Tell your agent to join this chat: <hostLink>`
+- guest: `Tell the other agent to join this chat: <guestLink>`
+
 Normal happy-path behavior must not require the human to run a helper command manually.
 
 Manual helper commands may still exist for diagnostics, smoke testing, or recovery, but they are not the documented product flow.
@@ -135,9 +142,11 @@ Internal lifecycle:
 - `expired`
 
 Derived browser status:
+- `waiting_for_both`
 - `waiting_for_host`
 - `waiting_for_guest`
 - `active`
+- `ended`
 - `expired`
 
 Rules:
@@ -145,6 +154,14 @@ Rules:
 - room expires unless both host and guest are connected within 10 minutes of room creation
 - once both sides are connected, room becomes `active`
 - if either side disconnects after activation, room ends rather than attempting resume
+
+Browser/API status mapping:
+- no participants connected -> `waiting_for_both`
+- only host connected -> `waiting_for_guest`
+- only guest connected -> `waiting_for_host`
+- both connected -> `active`
+- active room broken intentionally or by disconnect -> `ended`
+- room never fully activated before deadline -> `expired`
 
 The 10-minute rule is absolute from room creation to full activation.
 
@@ -163,6 +180,8 @@ Requirements:
 - no new independent chat process may take over the conversation
 - no browser redirect fallback is acceptable in the happy path
 - no manual helper invocation is required in the happy path
+- no manual MCP tool invocation is required in the happy path
+- the user must not need to type `host_meet`, `guest_meet`, `send_and_wait`, or any equivalent manual room command
 
 ## Conversation Runtime
 
@@ -214,6 +233,7 @@ Required semantics:
 - `workingDraft` may change
 - `/revert` restores `workingDraft` to `originalDraft`
 - free-form user text in draft mode is treated as feedback to revise `workingDraft`
+- `/end` ends the room without sending the pending reply
 
 ## Mixed-Client Support
 
@@ -243,6 +263,13 @@ Explicitly out of scope:
 - browser-side participant session
 - browser fallback join flow
 
+Browser UI must not render:
+- raw room codes as the primary user-facing join primitive
+- join buttons that imply browser participation
+- helper commands as the happy-path copy
+- browser-side send controls
+- browser transcript panes
+
 ## Server/API Direction
 
 Both creation paths should converge on the same room-creation contract.
@@ -262,12 +289,17 @@ This work is done when all of the following are true:
 
 - CLI room creation and browser room creation produce the same room semantics.
 - Browser UI requires an opening message and shows the two copy-ready instructions plus status only.
+- Browser UI exposes `waiting_for_both`, `waiting_for_host`, `waiting_for_guest`, `active`, `ended`, and `expired` consistently with the server lifecycle.
 - Pasting either invite instruction into an already-running Claude Code or Codex session is sufficient to join from that same session.
+- The happy path does not require the user to type `host_meet`, `guest_meet`, `send_and_wait`, or any equivalent manual helper command.
 - The guest sees the persisted opening message immediately on join.
+- The host also sees the persisted opening message in room history when the host session attaches.
 - Replies auto-send after 5 seconds unless interrupted with `e`.
 - Draft mode supports `/send`, `/regenerate`, `/revert`, `/end`, and free-form draft feedback.
 - Rooms expire if both sides have not connected within 10 minutes of creation.
 - Conversation remains in CLI only for the happy path.
+- All four client pairings are verified from already-running sessions, not just fresh-session harnesses.
+- Browser UI does not render helper commands, browser join buttons, send controls, or transcript panes.
 
 ## Recommended Implementation Slices
 
@@ -276,5 +308,4 @@ This work is done when all of the following are true:
 3. Replace bootstrap-only helper behavior with a resident conversation runtime.
 4. Implement 5 second hold plus per-message draft lifecycle.
 5. Constrain browser UI to launcher + status only.
-6. Run mixed-client fresh-session smoke tests against the finished flow.
-
+6. Run mixed-client already-running-session smoke tests against the finished flow.
