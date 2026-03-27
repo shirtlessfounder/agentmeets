@@ -29,6 +29,10 @@ It should feel like:
 Standard user-facing identity primitive:
 - the normal product flow uses the role-scoped invite links and their copy-ready instructions as the room identity surface
 - internal raw room codes are not part of the standard user-facing launcher, confirmation, or error UX
+- the canonical user-facing room identifier is `Room <inviteStem>`
+- `inviteStem` is the shared opaque invite stem before the `.1` / `.2` role suffix
+- launcher status, join confirmations, waiting states, and standard errors refer to `Room <inviteStem>`
+- full invite URLs remain for copy actions only, not for routine status/confirmation identity
 
 ## Goals
 
@@ -113,6 +117,8 @@ Rules:
 - it is replayed to the guest as soon as the guest session joins
 - it is rendered to the host session as part of room history when the host session attaches so both sides see the same first-message origin
 - it does not wait for the host agent to attach before becoming part of room history
+- the host sees the opening message exactly once as historical room content, not as a fresh inbound message that asks for another reply
+- if guest messages already exist before host attach, host-side history still renders the opening message first and later guest messages after it in persisted order
 
 Reasoning:
 - this gives the guest the fastest and most reliable first prompt to respond to
@@ -137,6 +143,13 @@ Minimum supported pasted forms:
 - the exact guest instruction above
 - the raw `hostLink` URL by itself
 - the raw `guestLink` URL by itself
+
+Invite parsing boundary:
+- any pasted input containing at least one valid AgentMeets invite URL must be accepted
+- surrounding natural-language text is allowed
+- common trailing punctuation is ignored
+- quoted or multiline pasted content is allowed
+- if multiple AgentMeets invite URLs are present, the first valid one wins
 
 Normal happy-path behavior must not require the human to run a helper command manually.
 
@@ -210,6 +223,14 @@ Minimum confirmation/error content:
 - failure includes a deterministic class such as invalid invite, expired invite, or local bootstrap/runtime failure
 - pre-activation confirmation includes waiting state when the opposite role is not yet attached
 - if a draft is staged before activation, local UX indicates that the reply is staged and will not deliver until the room becomes active
+
+Required helper-rendered local UX surfaces:
+- join success is shown as a dedicated AgentMeets local status surface
+- waiting-for-other-side is shown as a dedicated AgentMeets local status surface
+- staged-pre-activation is shown as a dedicated AgentMeets local status surface
+- bootstrap/runtime failure is shown as a dedicated AgentMeets local error surface
+- the 5 second auto-send hold is shown as a transient AgentMeets terminal status line
+- these surfaces are helper-rendered, not assistant-authored prose
 
 Requirements:
 - no new independent chat process may take over the conversation
@@ -354,14 +375,15 @@ This work is done when all of the following are true:
 - Browser UI exposes `waiting_for_both`, `waiting_for_host`, `waiting_for_guest`, `active`, `ended`, and `expired` consistently with the server lifecycle.
 - Pasting either invite instruction into an already-running Claude Code or Codex session is sufficient to join from that same session.
 - Pasting the exact canonical host/guest instructions and the raw role links by themselves are all supported join triggers.
+- Arbitrary pasted natural-language text also works if it contains a valid AgentMeets invite URL.
 - After successful join, the session displays a deterministic local connected confirmation instead of relying on implicit model behavior.
-- Success confirmation shows role and the user-facing invite-based room identity, not a raw room code.
+- Success confirmation shows role and `Room <inviteStem>`, not a raw room code or full URL.
 - Failure handling is deterministic for invalid invite, expired invite, and local bootstrap/runtime failure.
 - Duplicate-role attach fails deterministically and does not replace the already attached live session.
 - If only one role is attached, the local UX shows waiting state for the missing role.
 - The happy path does not require the user to type `host_meet`, `guest_meet`, `send_and_wait`, or any equivalent manual helper command.
 - The guest sees the persisted opening message immediately on join.
-- The host also sees the persisted opening message in room history when the host session attaches.
+- The host also sees the persisted opening message exactly once in room history when the host session attaches.
 - If the guest joins before the host, the guest may draft immediately and outbound delivery waits until activation.
 - If the guest stages a reply before activation, local UX makes it clear that delivery is waiting on activation.
 - Replies auto-send after 5 seconds unless interrupted with `e`.
@@ -377,6 +399,7 @@ This work is done when all of the following are true:
 - Opening an invite link in a browser shows only a thin informational/status view, never browser join/send/transcript controls.
 - Browser status auto-refreshes while unresolved and disables copy actions once the room expires.
 - Standard user-facing success and failure UX does not advertise manual helper commands.
+- Local success, waiting, staged-pre-activation, failure, and hold states are shown via helper-rendered AgentMeets status/control surfaces rather than assistant-authored prose.
 
 ## Recommended Implementation Slices
 
