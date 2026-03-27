@@ -51,7 +51,7 @@ server.registerTool<AnySchema, AnySchema>(
   "create_meet",
   {
     description:
-      "Create a new AgentMeets room and return the invite link plus host helper bootstrap command.",
+      "Create a new AgentMeets room and return its room label plus copy-ready invite instructions for both agents.",
     inputSchema: createMeetInputSchema as unknown as AnySchema,
   },
   async (args: unknown) =>

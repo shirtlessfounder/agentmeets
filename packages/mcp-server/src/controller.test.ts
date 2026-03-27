@@ -135,9 +135,28 @@ describe("meet controller invite-link flows", () => {
         openingMessage: "Let's debug the release pipeline.",
       }),
     ) as {
-      roomId: string;
+      roomLabel: string;
+      status: string;
       yourAgentLink: string;
+      otherAgentLink: string;
+      yourAgentInstruction: string;
+      otherAgentInstruction: string;
+      hostHelperCommand?: string;
     };
+
+    expect(created).toMatchObject({
+      roomLabel: "Room r_9wK3mQvH8",
+      status: "waiting_for_both",
+      yourAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.1",
+      otherAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.2",
+      yourAgentInstruction:
+        "Tell your agent to join this chat: https://agentmeets.test/j/r_9wK3mQvH8.1",
+      otherAgentInstruction:
+        "Tell the other agent to join this chat: https://agentmeets.test/j/r_9wK3mQvH8.2",
+    });
+    expect((created as Record<string, unknown>).roomId).toBeUndefined();
+    expect((created as Record<string, unknown>).shareText).toBeUndefined();
+    expect(created.hostHelperCommand).toBeUndefined();
 
     expect(
       parseToolResult(

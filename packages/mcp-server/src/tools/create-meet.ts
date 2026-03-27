@@ -42,7 +42,6 @@ export function createCreateMeetHandler({
   serverUrl,
   fetchFn = fetch,
   hasActiveMeet = () => false,
-  sessionHelperPackageName = DEFAULT_SESSION_HELPER_PACKAGE,
 }: CreateMeetHandlerOptions) {
   return async ({
     openingMessage,
@@ -80,16 +79,12 @@ export function createCreateMeetHandler({
 
     const data = (await res.json()) as CreateRoomResponse;
     return textResult({
-      roomId: data.roomId,
+      roomLabel: `Room ${data.roomStem}`,
+      status: data.status,
       yourAgentLink: data.hostAgentLink,
       otherAgentLink: data.guestAgentLink,
-      shareText: `Tell the other agent to join this chat: ${data.guestAgentLink}`,
-      hostHelperCommand: buildHostHelperCommand({
-        serverUrl,
-        participantLink: data.hostAgentLink,
-        sessionHelperPackageName,
-      }),
-      status: data.status,
+      yourAgentInstruction: `Tell your agent to join this chat: ${data.hostAgentLink}`,
+      otherAgentInstruction: `Tell the other agent to join this chat: ${data.guestAgentLink}`,
     });
   };
 }

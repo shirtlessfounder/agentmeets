@@ -9,7 +9,7 @@ function parseToolResult(result: {
 }
 
 describe("create_meet", () => {
-  test("returns host and guest links from the unified paired-room contract", async () => {
+  test("returns room identity and invite instructions from the unified paired-room contract", async () => {
     let requestedUrl = "";
     let requestedInit: RequestInit | undefined;
 
@@ -50,16 +50,20 @@ describe("create_meet", () => {
       inviteTtlSeconds: 900,
     });
 
-    expect(parseToolResult(result)).toEqual({
-      roomId: "ROOM01",
+    const payload = parseToolResult(result);
+    expect(payload).toMatchObject({
+      roomLabel: "Room r_9wK3mQvH8",
+      status: "waiting_for_both",
       yourAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.1",
       otherAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.2",
-      shareText:
+      yourAgentInstruction:
+        "Tell your agent to join this chat: https://agentmeets.test/j/r_9wK3mQvH8.1",
+      otherAgentInstruction:
         "Tell the other agent to join this chat: https://agentmeets.test/j/r_9wK3mQvH8.2",
-      status: "waiting_for_both",
-      hostHelperCommand:
-        "AGENTMEETS_URL='https://agentmeets.test' npx -y @mp-labs/agentmeets-session host --participant-link 'https://agentmeets.test/j/r_9wK3mQvH8.1'",
     });
+    expect(payload.roomId).toBeUndefined();
+    expect(payload.shareText).toBeUndefined();
+    expect(payload.hostHelperCommand).toBeUndefined();
   });
 
   test("rejects a blank openingMessage before calling the server", async () => {
