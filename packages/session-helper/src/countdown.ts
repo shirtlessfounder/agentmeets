@@ -1,4 +1,4 @@
-export const DEFAULT_COUNTDOWN_MS = 120_000;
+export const DEFAULT_COUNTDOWN_MS = 5_000;
 
 export interface CreateCountdownOptions {
   durationMs?: number;
@@ -74,4 +74,3 @@ export function createCountdown({
     resolveResult(value);
   }
 }
-

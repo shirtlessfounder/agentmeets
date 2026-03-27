@@ -1,13 +1,11 @@
 import { closeSync, openSync, writeSync } from "node:fs";
 import { ClaudeCodeAdapter } from "./adapters/claude-code.js";
 import { CodexAdapter } from "./adapters/codex.js";
+import { BootstrapInviteError, bootstrapInviteRuntime } from "./bootstrap.js";
+import { renderLocalStatus } from "./local-ui.js";
+import { runSessionRuntime } from "./runtime.js";
 
 export type SessionAdapterName = "claude-code" | "codex";
-
-interface HostBootstrapAdapter {
-  injectHostReadyPrompt: (input: { participantLink: string }) => Promise<void>;
-  injectGuestReadyPrompt: (input: { participantLink: string }) => Promise<void>;
-}
 
 interface CreateSessionAdapterOptions {
   adapterName: SessionAdapterName;
@@ -23,12 +21,16 @@ interface CliEnvironment {
   closeTty: (fd: number) => void;
   createAdapter: (
     options: CreateSessionAdapterOptions,
-  ) => HostBootstrapAdapter;
+  ) => ClaudeCodeAdapter | CodexAdapter;
+  cwd?: () => string;
+  bootstrapInviteRuntime?: typeof bootstrapInviteRuntime;
+  createRuntime?: typeof runSessionRuntime;
 }
 
 const HELP_TEXT = `agentmeets-session
 
 Usage:
+  agentmeets-session bootstrap --pasted-text <text> [--adapter claude-code|codex]
   agentmeets-session host --participant-link <url> [--adapter claude-code|codex]
   agentmeets-session guest --participant-link <url> [--adapter claude-code|codex]
   agentmeets-session --help
@@ -72,6 +74,10 @@ export async function main(
 
   if (argv[0] === "guest") {
     return runBootstrap("guest", argv.slice(1), environment);
+  }
+
+  if (argv[0] === "bootstrap") {
+    return runInviteBootstrap(argv.slice(1), environment);
   }
 
   environment.stderr.write(`Unknown arguments: ${argv.join(" ")}\n\n${HELP_TEXT}`);
@@ -129,6 +135,81 @@ async function runBootstrap(
     return 0;
   } finally {
     environment.closeTty(ttyFd);
+  }
+}
+
+async function runInviteBootstrap(
+  argv: string[],
+  environment: CliEnvironment,
+): Promise<number> {
+  const options = parseFlags(argv);
+  const pastedText = options["pasted-text"];
+  const adapterName = resolveSessionAdapterName(options.adapter, environment.env);
+
+  if (!pastedText) {
+    environment.stderr.write("Missing required bootstrap argument: --pasted-text\n");
+    return 1;
+  }
+
+  if (!isSessionAdapterName(adapterName)) {
+    environment.stderr.write(`Unsupported adapter: ${adapterName}\n`);
+    return 1;
+  }
+
+  let ttyFd: number;
+  try {
+    ttyFd = environment.openTty();
+  } catch (error) {
+    environment.stderr.write(
+      `Cannot open controlling PTY at /dev/tty: ${formatError(error)}\n`,
+    );
+    return 1;
+  }
+
+  let shouldCloseTty = true;
+  try {
+    const adapter = environment.createAdapter({
+      adapterName,
+      writeToPty(chunk) {
+        environment.writeTty(ttyFd, chunk);
+      },
+    });
+
+    try {
+      const bootstrap = await (environment.bootstrapInviteRuntime ??
+        bootstrapInviteRuntime)({
+        pastedText,
+        adapterName,
+      });
+
+      await (environment.createRuntime ?? runSessionRuntime)({
+        rootDir: environment.cwd?.() ?? process.cwd(),
+        roomId: bootstrap.roomId,
+        wsUrl: bootstrap.wsUrl,
+        role: bootstrap.role,
+        roomLabel: bootstrap.roomLabel,
+        initialStatus: bootstrap.status,
+        adapter,
+      });
+      shouldCloseTty = false;
+      return 0;
+    } catch (error) {
+      if (error instanceof BootstrapInviteError) {
+        await adapter.renderLocalSurface(
+          renderLocalStatus({
+            kind: "failure",
+            code: error.code,
+          }),
+        );
+        return 1;
+      }
+
+      throw error;
+    }
+  } finally {
+    if (shouldCloseTty) {
+      environment.closeTty(ttyFd);
+    }
   }
 }
 

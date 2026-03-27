@@ -20,6 +20,26 @@ interface TestCliEnvironment {
       participantLink: string;
     }) => Promise<void>;
   };
+  cwd?: () => string;
+  bootstrapInviteRuntime?: (input: {
+    pastedText: string;
+    adapterName: string;
+  }) => Promise<{
+    roomId: string;
+    role: "host" | "guest";
+    roomLabel: string;
+    status: string;
+    wsUrl: string;
+  }>;
+  createRuntime?: (input: {
+    rootDir: string;
+    roomId: string;
+    role: "host" | "guest";
+    roomLabel: string;
+    initialStatus: string;
+    wsUrl: string;
+    adapter: unknown;
+  }) => Promise<unknown>;
 }
 
 function createTestCliEnvironment() {
@@ -31,6 +51,15 @@ function createTestCliEnvironment() {
     participantLink: string;
   }> = [];
   const adapterNames: string[] = [];
+  const bootstrapCalls: Array<{ pastedText: string; adapterName: string }> = [];
+  const runtimeCalls: Array<{
+    rootDir: string;
+    roomId: string;
+    role: "host" | "guest";
+    roomLabel: string;
+    initialStatus: string;
+    wsUrl: string;
+  }> = [];
 
   const environment: TestCliEnvironment = {
     env: {},
@@ -51,6 +80,9 @@ function createTestCliEnvironment() {
       ttyWrites.push(chunk);
     },
     closeTty() {},
+    cwd() {
+      return "/tmp/agentmeets-runtime-root";
+    },
     createAdapter(options) {
       adapterNames.push(options.adapterName);
       return {
@@ -68,6 +100,20 @@ function createTestCliEnvironment() {
         },
       };
     },
+    async bootstrapInviteRuntime(input) {
+      bootstrapCalls.push(input);
+      return {
+        roomId: "ROOM-789",
+        role: "guest",
+        roomLabel: "Room r_9wK3mQvH8",
+        status: "waiting_for_host",
+        wsUrl: "ws://agentmeets.test/rooms/ROOM-789/ws?token=guest-session-token",
+      };
+    },
+    async createRuntime(input) {
+      runtimeCalls.push(input);
+      return {};
+    },
   };
 
   return {
@@ -77,6 +123,8 @@ function createTestCliEnvironment() {
     ttyWrites,
     adapterCalls,
     adapterNames,
+    bootstrapCalls,
+    runtimeCalls,
   };
 }
 
@@ -202,5 +250,40 @@ describe("session-helper CLI", () => {
     expect(harness.stdout.join("")).toContain(
       "agentmeets-session guest --participant-link <url>",
     );
+  });
+
+  test("bootstrap mode accepts pasted invite instructions and starts the resident runtime", async () => {
+    const module = await import("./cli.js").catch(() => null);
+
+    expect(module).not.toBeNull();
+    if (!module) {
+      return;
+    }
+
+    const harness = createTestCliEnvironment();
+    const pastedText =
+      "Tell your agent to join this chat: https://agentmeets.test/j/r_9wK3mQvH8.2";
+
+    const exitCode = await (module.main as any)(
+      ["bootstrap", "--pasted-text", pastedText],
+      harness.environment,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(harness.bootstrapCalls).toEqual([
+      {
+        pastedText,
+        adapterName: "claude-code",
+      },
+    ]);
+    expect(harness.runtimeCalls).toHaveLength(1);
+    expect(harness.runtimeCalls[0]).toMatchObject({
+      rootDir: "/tmp/agentmeets-runtime-root",
+      roomId: "ROOM-789",
+      role: "guest",
+      roomLabel: "Room r_9wK3mQvH8",
+      initialStatus: "waiting_for_host",
+      wsUrl: "ws://agentmeets.test/rooms/ROOM-789/ws?token=guest-session-token",
+    });
   });
 });
