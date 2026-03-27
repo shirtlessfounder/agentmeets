@@ -27,7 +27,7 @@ describe("GET /j/:inviteToken", () => {
       roomId: "ABC123",
       roomStem: "r_9wK3mQvH8",
       role: "host",
-      status: "waiting_for_join",
+      status: "waiting_for_both",
       openingMessage: "Opening hello",
       expiresAt: "2099-03-24 12:05:00",
     });
@@ -46,7 +46,7 @@ describe("POST /invites/:inviteToken/claim", () => {
     expect(await res.json()).toEqual({ error: "missing_idempotency_key" });
   });
 
-  test("returns activating guest claim and is idempotent for the same key", async () => {
+  test("returns waiting_for_both for a guest claim and is idempotent for the same key", async () => {
     createRoom(db, "ABC123", "host-token", "Opening hello", "r_9wK3mQvH8");
     createInvite(db, "ABC123", "r_9wK3mQvH8.2", "2099-03-24 12:05:00");
 
@@ -60,7 +60,7 @@ describe("POST /invites/:inviteToken/claim", () => {
       roomId: "ABC123",
       role: "guest",
       sessionToken: expect.any(String),
-      status: "activating",
+      status: "waiting_for_both",
     });
 
     const repeat = await app.request("/invites/r_9wK3mQvH8.2/claim", {

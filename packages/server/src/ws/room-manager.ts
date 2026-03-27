@@ -8,12 +8,13 @@ import type { ServerWebSocket } from "bun";
 import { Database } from "bun:sqlite";
 import {
   activateRoom,
+  clearRoleConnected,
   closeRoom,
   expireRoom,
+  markRoleConnected,
   saveMessage,
-  touchRoomActivity,
 } from "../db/index.js";
-import { getMessages } from "../db/messages.js";
+import { getReplayMessages } from "../db/messages.js";
 
 export interface WsData {
   roomId: string;
@@ -44,7 +45,6 @@ interface RoomManagerOptions {
 interface RoomLifecycleState {
   roomStatus: StoredRoomStatus;
   inviteExpiresAt: string | null;
-  hasClaimedInvite: boolean;
   lastActivityAt: string | null;
 }
 
@@ -65,34 +65,47 @@ export class RoomManager {
     const room = this.ensureRoom(roomId);
 
     room[role] = ws;
+    markRoleConnected(this.db, roomId, role);
 
     const lifecycle = this.getRoomLifecycleState(roomId);
-    if (
-      lifecycle
-      && this.usesClaimedWaitingIdleTimeout(lifecycle)
-      && this.expireIdleRoomIfNeededFromLifecycle(roomId, lifecycle)
-    ) {
+    if (lifecycle?.roomStatus === "expired") {
+      this.expireRoom(roomId);
+      return;
+    }
+    if (this.expireWaitingRoomIfNeededFromLifecycle(roomId, lifecycle)) {
       return;
     }
 
-    if (!room.isActive) {
-      if (lifecycle && this.usesWaitingInviteExpiry(lifecycle) && !room.timers.expiry) {
-        this.startWaitingExpiryTimer(roomId, lifecycle);
-      }
-      if (lifecycle && this.usesPreActivationIdleTimeout(lifecycle)) {
-        clearTimeout(room.timers.expiry);
-        room.timers.expiry = undefined;
-        this.recordRoomActivity(roomId);
-      }
+    if (!room.isActive && lifecycle && this.usesWaitingInviteExpiry(lifecycle) && !room.timers.expiry) {
+      this.startWaitingExpiryTimer(roomId, lifecycle);
+    }
+
+    if (role === "guest") {
+      this.replayRoomHistory(roomId, role, ws);
     }
 
     this.maybeActivateRoom(roomId);
+
+    if (role === "host" && room[role] === ws) {
+      this.replayRoomHistory(roomId, role, ws);
+    }
+
+    if (lifecycle && this.usesActiveIdleTimeout(lifecycle)) {
+      this.scheduleIdleTimeout(roomId, lifecycle);
+    }
   }
 
   removeConnection(roomId: string, role: Sender): void {
     const room = this.rooms.get(roomId);
     if (!room) return;
     room[role] = null;
+    clearRoleConnected(this.db, roomId, role);
+  }
+
+  shutdown(): void {
+    for (const roomId of this.rooms.keys()) {
+      this.cleanupRoom(roomId);
+    }
   }
 
   getOtherParticipant(roomId: string, role: Sender): ServerWebSocket<WsData> | null {
@@ -151,7 +164,7 @@ export class RoomManager {
     }
 
     const lifecycle = this.getRoomLifecycleState(roomId);
-    if (room?.isActive || (lifecycle && this.usesPreActivationIdleTimeout(lifecycle))) {
+    if (room?.isActive || (lifecycle && this.usesActiveIdleTimeout(lifecycle))) {
       this.scheduleIdleTimeout(roomId);
     }
     return true;
@@ -185,12 +198,6 @@ export class RoomManager {
     if (!room.isActive) {
       const hasConnections = room.host || room.guest;
       if (!hasConnections) {
-        const lifecycle = this.getRoomLifecycleState(roomId);
-        if (lifecycle && this.usesPreActivationIdleTimeout(lifecycle)) {
-          this.scheduleIdleTimeout(roomId, lifecycle);
-          return;
-        }
-
         this.cleanupRoom(roomId);
       }
       return;
@@ -215,7 +222,15 @@ export class RoomManager {
 
   expireIdleRoomIfNeeded(roomId: string): boolean {
     const lifecycle = this.getRoomLifecycleState(roomId);
-    if (!lifecycle || !this.usesClaimedWaitingIdleTimeout(lifecycle)) {
+    if (!lifecycle) {
+      return false;
+    }
+
+    if (this.expireWaitingRoomIfNeededFromLifecycle(roomId, lifecycle)) {
+      return true;
+    }
+
+    if (!this.usesActiveIdleTimeout(lifecycle)) {
       return false;
     }
 
@@ -233,22 +248,17 @@ export class RoomManager {
 
     room.timers.expiry = setTimeout(() => {
       const currentLifecycle = this.getRoomLifecycleState(roomId);
+      const currentRoom = this.rooms.get(roomId);
+      if (currentRoom) {
+        clearTimeout(currentRoom.timers.expiry);
+        currentRoom.timers.expiry = undefined;
+      }
       if (!currentLifecycle) {
         this.cleanupRoom(roomId);
         return;
       }
 
       if (!this.usesWaitingInviteExpiry(currentLifecycle)) {
-        const currentRoom = this.rooms.get(roomId);
-        if (!currentRoom) {
-          return;
-        }
-
-        clearTimeout(currentRoom.timers.expiry);
-        currentRoom.timers.expiry = undefined;
-        if (!currentRoom.isActive && this.usesPreActivationIdleTimeout(currentLifecycle)) {
-          this.scheduleIdleTimeout(roomId, currentLifecycle);
-        }
         return;
       }
 
@@ -262,16 +272,9 @@ export class RoomManager {
     if (room.isActive || !room.host || !room.guest) return;
 
     const lifecycle = this.getRoomLifecycleState(roomId);
-    const inviteExpiry = this.getInviteExpiry(lifecycle);
-    if (
-      lifecycle
-      && this.usesWaitingInviteExpiry(lifecycle)
-      && inviteExpiry
-      && inviteExpiry.getTime() <= Date.now()
-    ) {
+    if (this.expireWaitingRoomIfNeededFromLifecycle(roomId, lifecycle)) {
       clearTimeout(room.timers.expiry);
       room.timers.expiry = undefined;
-      this.expireRoom(roomId);
       return;
     }
 
@@ -280,16 +283,9 @@ export class RoomManager {
     room.timers.expiry = undefined;
     activateRoom(this.db, roomId);
 
-    sendJson(room.host, { type: "room_active" });
-    sendJson(room.guest, { type: "room_active" });
-    this.replayPendingMessages(roomId, "host", room.guest);
-    this.replayPendingMessages(roomId, "guest", room.host);
+    sendJson(room.host, { type: "room_active", roomId });
+    sendJson(room.guest, { type: "room_active", roomId });
 
-    this.scheduleIdleTimeout(roomId);
-  }
-
-  private recordRoomActivity(roomId: string): void {
-    touchRoomActivity(this.db, roomId);
     this.scheduleIdleTimeout(roomId);
   }
 
@@ -317,7 +313,7 @@ export class RoomManager {
         return;
       }
 
-      if (!this.usesPreActivationIdleTimeout(currentLifecycle)) {
+      if (!this.usesActiveIdleTimeout(currentLifecycle)) {
         this.cleanupRoom(roomId);
         return;
       }
@@ -328,19 +324,16 @@ export class RoomManager {
     }, Math.max(0, idleExpiry.getTime() - Date.now()));
   }
 
-  private replayPendingMessages(
+  private replayRoomHistory(
     roomId: string,
-    sender: Sender,
+    role: Sender,
     recipient: ServerWebSocket<WsData>,
   ): void {
-    const pendingMessages = getMessages(this.db, roomId).filter(
-      (message) => message.sender === sender,
-    );
-    for (const message of pendingMessages) {
+    for (const message of getReplayMessages(this.db, roomId, role)) {
       sendJson(recipient, {
         type: "message",
         messageId: message.id,
-        sender,
+        sender: message.sender,
         clientMessageId: `persisted:${message.id}`,
         replyToMessageId: null,
         content: message.content,
@@ -355,8 +348,7 @@ export class RoomManager {
         `SELECT
            r.status AS room_status,
            r.last_activity_at AS last_activity_at,
-           MIN(i.expires_at) AS invite_expires_at,
-           MAX(CASE WHEN i.claimed_at IS NOT NULL THEN 1 ELSE 0 END) AS has_claimed_invite
+           MIN(i.expires_at) AS invite_expires_at
          FROM rooms r
          LEFT JOIN invites i ON i.room_id = r.id
          WHERE r.id = ?
@@ -367,7 +359,6 @@ export class RoomManager {
           room_status: StoredRoomStatus;
           last_activity_at: string | null;
           invite_expires_at: string | null;
-          has_claimed_invite: number;
         }
       | null;
 
@@ -379,7 +370,6 @@ export class RoomManager {
       roomStatus: row.room_status,
       lastActivityAt: row.last_activity_at,
       inviteExpiresAt: row.invite_expires_at,
-      hasClaimedInvite: row.has_claimed_invite > 0,
     };
   }
 
@@ -392,19 +382,15 @@ export class RoomManager {
   }
 
   private usesWaitingInviteExpiry(lifecycle: RoomLifecycleState): boolean {
-    return lifecycle.roomStatus === "waiting" && !lifecycle.hasClaimedInvite;
+    return lifecycle.roomStatus === "waiting";
   }
 
-  private usesPreActivationIdleTimeout(lifecycle: RoomLifecycleState): boolean {
-    return lifecycle.roomStatus === "active" || lifecycle.hasClaimedInvite;
-  }
-
-  private usesClaimedWaitingIdleTimeout(lifecycle: RoomLifecycleState): boolean {
-    return lifecycle.roomStatus === "waiting" && lifecycle.hasClaimedInvite;
+  private usesActiveIdleTimeout(lifecycle: RoomLifecycleState): boolean {
+    return lifecycle.roomStatus === "active";
   }
 
   private getIdleExpiry(lifecycle: RoomLifecycleState | null): Date | null {
-    if (!lifecycle?.lastActivityAt || !this.usesPreActivationIdleTimeout(lifecycle)) {
+    if (!lifecycle?.lastActivityAt || !this.usesActiveIdleTimeout(lifecycle)) {
       return null;
     }
 
@@ -414,6 +400,23 @@ export class RoomManager {
     }
 
     return new Date(lastActivityMs + this.idleTimeoutMs);
+  }
+
+  private expireWaitingRoomIfNeededFromLifecycle(
+    roomId: string,
+    lifecycle: RoomLifecycleState | null,
+  ): boolean {
+    if (!lifecycle || !this.usesWaitingInviteExpiry(lifecycle)) {
+      return false;
+    }
+
+    const inviteExpiry = this.getInviteExpiry(lifecycle);
+    if (!inviteExpiry || inviteExpiry.getTime() > Date.now()) {
+      return false;
+    }
+
+    this.expireRoom(roomId);
+    return true;
   }
 
   private expireIdleRoomIfNeededFromLifecycle(

@@ -33,7 +33,7 @@ describe("GET /public/rooms/:roomStem", () => {
     expect(await res.json()).toEqual({
       roomId: "ROOM01",
       roomStem: "r_9wK3mQvH8",
-      status: "waiting_for_join",
+      status: "waiting_for_both",
       hostAgentLink: expect.stringMatching(/\/j\/r_9wK3mQvH8\.1$/),
       guestAgentLink: expect.stringMatching(/\/j\/r_9wK3mQvH8\.2$/),
       inviteExpiresAt: "2099-03-24 12:05:00",

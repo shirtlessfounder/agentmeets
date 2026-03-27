@@ -91,6 +91,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  roomManager.shutdown();
   server.stop(true);
   db.close();
 });
@@ -129,7 +130,7 @@ describe("invite flow", () => {
       roomId: created.roomId,
       roomStem: created.roomStem,
       role: "host",
-      status: "waiting_for_join",
+      status: "waiting_for_both",
       openingMessage: "Let's debug the release pipeline.",
       expiresAt: expect.any(String),
     });
@@ -144,7 +145,7 @@ describe("invite flow", () => {
       roomId: created.roomId,
       role: "host",
       sessionToken: expect.any(String),
-      status: "activating",
+      status: "waiting_for_both",
     });
 
     const guestClaimResponse = await fetch(`${baseUrl}/invites/${guestInviteToken}/claim`, {
@@ -157,7 +158,7 @@ describe("invite flow", () => {
       roomId: created.roomId,
       role: "guest",
       sessionToken: expect.any(String),
-      status: "activating",
+      status: "waiting_for_both",
     });
 
     const roomRow = db
@@ -180,14 +181,26 @@ describe("invite flow", () => {
     );
     await waitForOpen(hostWs);
 
+    expect(await waitForMessage(hostWs)).toMatchObject({
+      type: "message",
+      sender: "host",
+      content: "Let's debug the release pipeline.",
+    });
+
     const hostActivationPromise = waitForMessage(hostWs);
     const guestWs = new WebSocket(
       `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${guestClaim.sessionToken}`,
     );
     await waitForOpen(guestWs);
 
-    expect(await hostActivationPromise).toEqual({ type: "room_active" });
-    expect(await waitForMessage(guestWs)).toEqual({ type: "room_active" });
+    expect(await waitForMessage(guestWs)).toMatchObject({
+      type: "message",
+      sender: "host",
+      content: "Let's debug the release pipeline.",
+    });
+
+    expect(await hostActivationPromise).toEqual({ type: "room_active", roomId: created.roomId });
+    expect(await waitForMessage(guestWs)).toEqual({ type: "room_active", roomId: created.roomId });
 
     const manifestAfterActivation = await fetch(`${baseUrl}/j/${guestInviteToken}`);
     expect(manifestAfterActivation.status).toBe(200);

@@ -19,6 +19,7 @@ export type ClientMessage = MessagePayload | EndPayload;
 
 export interface RoomActiveEvent {
   type: "room_active";
+  roomId: string;
 }
 
 export interface MessageEvent {

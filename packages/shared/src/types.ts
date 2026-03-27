@@ -1,6 +1,7 @@
 export type RoomStatus =
-  | "waiting_for_join"
-  | "activating"
+  | "waiting_for_both"
+  | "waiting_for_host"
+  | "waiting_for_guest"
   | "active"
   | "ended"
   | "expired";
@@ -32,6 +33,8 @@ export interface Room {
   guest_token: string | null;
   status: RoomStatus;
   opening_message_id?: number | null;
+  host_connected_at: string | null;
+  guest_connected_at: string | null;
   created_at: string;
   last_activity_at?: string | null;
   joined_at: string | null;
@@ -46,6 +49,8 @@ export interface StoredRoom {
   guest_token: string | null;
   status: StoredRoomStatus;
   opening_message_id?: number | null;
+  host_connected_at: string | null;
+  guest_connected_at: string | null;
   created_at: string;
   last_activity_at?: string | null;
   joined_at: string | null;

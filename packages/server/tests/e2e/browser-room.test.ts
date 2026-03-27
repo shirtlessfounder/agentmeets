@@ -66,6 +66,27 @@ function waitForMessage(ws: WebSocket): Promise<ServerMessage> {
   });
 }
 
+function waitForMessages(ws: WebSocket, count: number): Promise<ServerMessage[]> {
+  return new Promise((resolve, reject) => {
+    const messages: ServerMessage[] = [];
+    const timeout = setTimeout(() => {
+      ws.removeEventListener("message", onMessage);
+      reject(new Error("Timeout waiting for messages"));
+    }, 5000);
+
+    const onMessage = (event: MessageEvent) => {
+      messages.push(JSON.parse(event.data as string) as ServerMessage);
+      if (messages.length === count) {
+        clearTimeout(timeout);
+        ws.removeEventListener("message", onMessage);
+        resolve(messages);
+      }
+    };
+
+    ws.addEventListener("message", onMessage);
+  });
+}
+
 beforeEach(async () => {
   db = new Database(":memory:");
   initializeSchema(db);
@@ -93,11 +114,76 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  roomManager.shutdown();
   server.stop(true);
   db.close();
 });
 
 describe("browser room presentation", () => {
+  test("public room status reflects the actually connected role instead of invite claims", async () => {
+    const baseUrl = `http://localhost:${port}`;
+    (roomManager as { idleTimeoutMs: number }).idleTimeoutMs = 2_000;
+
+    const createResponse = await fetch(`${baseUrl}/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ openingMessage: "Track real connection state." }),
+    });
+    expect(createResponse.status).toBe(201);
+
+    const created = (await createResponse.json()) as {
+      roomId: string;
+      roomStem: string;
+      hostAgentLink: string;
+      guestAgentLink: string;
+    };
+    const hostInviteToken = new URL(created.hostAgentLink).pathname.split("/").pop()!;
+    const guestInviteToken = new URL(created.guestAgentLink).pathname.split("/").pop()!;
+
+    const hostClaimResponse = await fetch(`${baseUrl}/invites/${hostInviteToken}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": "browser-room-host-only-claim" },
+    });
+    expect(hostClaimResponse.status).toBe(200);
+    const hostClaim = (await hostClaimResponse.json()) as { sessionToken: string };
+
+    const hostWs = new WebSocket(
+      `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${hostClaim.sessionToken}`,
+    );
+    await waitForOpen(hostWs);
+
+    const hostOnlyRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
+    expect(hostOnlyRoom.status).toBe(200);
+    expect(await hostOnlyRoom.json()).toMatchObject({
+      roomStem: created.roomStem,
+      status: "waiting_for_guest",
+    });
+
+    hostWs.close();
+    await Bun.sleep(50);
+
+    const guestClaimResponse = await fetch(`${baseUrl}/invites/${guestInviteToken}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": "browser-room-guest-only-claim" },
+    });
+    expect(guestClaimResponse.status).toBe(200);
+    const guestClaim = (await guestClaimResponse.json()) as { sessionToken: string };
+
+    const guestWs = new WebSocket(
+      `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${guestClaim.sessionToken}`,
+    );
+    await waitForOpen(guestWs);
+
+    const guestOnlyRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
+    expect(guestOnlyRoom.status).toBe(200);
+    expect(await guestOnlyRoom.json()).toMatchObject({
+      roomStem: created.roomStem,
+      status: "waiting_for_host",
+    });
+
+    guestWs.close();
+  });
+
   test("public room and invite manifest return 410 after idle expiry", async () => {
     const baseUrl = `http://localhost:${port}`;
 
@@ -137,14 +223,27 @@ describe("browser room presentation", () => {
       `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${hostClaim.sessionToken}`,
     );
     await waitForOpen(hostWs);
+    expect(await waitForMessage(hostWs)).toMatchObject({
+      type: "message",
+      sender: "host",
+      content: "Browser-safe room flow.",
+    });
 
+    const hostActivationPromise = waitForMessage(hostWs);
     const guestWs = new WebSocket(
       `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${guestClaim.sessionToken}`,
     );
+    const guestMessagesPromise = waitForMessages(guestWs, 2);
     await waitForOpen(guestWs);
 
-    expect(await waitForMessage(hostWs)).toEqual({ type: "room_active" });
-    expect(await waitForMessage(guestWs)).toEqual({ type: "room_active" });
+    const guestMessages = await guestMessagesPromise;
+    expect(guestMessages[0]).toMatchObject({
+      type: "message",
+      sender: "host",
+      content: "Browser-safe room flow.",
+    });
+    expect(guestMessages[1]).toEqual({ type: "room_active", roomId: created.roomId });
+    expect(await hostActivationPromise).toEqual({ type: "room_active", roomId: created.roomId });
     expect(await waitForMessage(hostWs)).toEqual({ type: "ended", reason: "expired" });
     expect(await waitForMessage(guestWs)).toEqual({ type: "ended", reason: "expired" });
 
@@ -234,7 +333,7 @@ describe("browser room presentation", () => {
     expect(room.guest_token).toEqual(expect.any(String));
   });
 
-  test("claimed invite sessions can still activate after the original invite TTL elapses", async () => {
+  test("claimed invite sessions cannot activate after the original invite TTL elapses", async () => {
     const baseUrl = `http://localhost:${port}`;
     (roomManager as any).idleTimeoutMs = 2_000;
 
@@ -272,24 +371,56 @@ describe("browser room presentation", () => {
 
     await Bun.sleep(1_100);
 
+    const manifest = await fetch(`${baseUrl}/j/${hostInviteToken}`);
+    expect(manifest.status).toBe(410);
+    expect(await manifest.json()).toEqual({ error: "invite_expired" });
+
+    const publicRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
+    expect(publicRoom.status).toBe(410);
+    expect(await publicRoom.json()).toEqual({ error: "room_expired" });
+
     const hostWs = new WebSocket(
       `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${hostClaim.sessionToken}`,
     );
-    await waitForOpen(hostWs);
-
     const guestWs = new WebSocket(
       `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${guestClaim.sessionToken}`,
     );
-    await waitForOpen(guestWs);
 
-    expect(await waitForMessage(hostWs)).toEqual({ type: "room_active" });
-    expect(await waitForMessage(guestWs)).toEqual({ type: "room_active" });
+    const [hostClose, guestClose] = await Promise.all([
+      new Promise<{ code: number; reason: string }>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Timeout waiting for close")), 5000);
+        hostWs.addEventListener(
+          "close",
+          (event) => {
+            clearTimeout(timeout);
+            resolve({ code: event.code, reason: event.reason });
+          },
+          { once: true },
+        );
+      }),
+      new Promise<{ code: number; reason: string }>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("Timeout waiting for close")), 5000);
+        guestWs.addEventListener(
+          "close",
+          (event) => {
+            clearTimeout(timeout);
+            resolve({ code: event.code, reason: event.reason });
+          },
+          { once: true },
+        );
+      }),
+    ]);
+    expect(hostClose.code).not.toBe(1000);
+    expect(guestClose.code).not.toBe(1000);
 
-    hostWs.close();
-    guestWs.close();
+    const room = db
+      .prepare("SELECT status, closed_at FROM rooms WHERE id = ?")
+      .get(created.roomId) as Pick<StoredRoom, "status" | "closed_at">;
+    expect(room.status).toBe("expired");
+    expect(room.closed_at).toEqual(expect.any(String));
   });
 
-  test("claimed rooms expire after a disconnect and surface as expired over HTTP", async () => {
+  test("claimed rooms fall back to waiting after a disconnect until the invite expires", async () => {
     const baseUrl = `http://localhost:${port}`;
 
     const createResponse = await fetch(`${baseUrl}/rooms`, {
@@ -322,18 +453,28 @@ describe("browser room presentation", () => {
     await Bun.sleep(100);
 
     const manifest = await fetch(`${baseUrl}/j/${hostInviteToken}`);
-    expect(manifest.status).toBe(410);
-    expect(await manifest.json()).toEqual({ error: "invite_expired" });
+    expect(manifest.status).toBe(200);
+    expect(await manifest.json()).toMatchObject({
+      roomId: created.roomId,
+      roomStem: created.roomStem,
+      role: "host",
+      status: "waiting_for_both",
+      openingMessage: "Claim, connect once, then abandon.",
+    });
 
     const publicRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
-    expect(publicRoom.status).toBe(410);
-    expect(await publicRoom.json()).toEqual({ error: "room_expired" });
+    expect(publicRoom.status).toBe(200);
+    expect(await publicRoom.json()).toMatchObject({
+      roomStem: created.roomStem,
+      status: "waiting_for_both",
+    });
 
     const room = db
-      .prepare("SELECT status, closed_at FROM rooms WHERE id = ?")
-      .get(created.roomId) as Pick<StoredRoom, "status" | "closed_at">;
-    expect(room.status).toBe("expired");
-    expect(room.closed_at).toEqual(expect.any(String));
+      .prepare("SELECT status, closed_at, host_connected_at FROM rooms WHERE id = ?")
+      .get(created.roomId) as Pick<StoredRoom, "status" | "closed_at" | "host_connected_at">;
+    expect(room.status).toBe("waiting");
+    expect(room.closed_at).toBeNull();
+    expect(room.host_connected_at).toBeNull();
   });
 
 });

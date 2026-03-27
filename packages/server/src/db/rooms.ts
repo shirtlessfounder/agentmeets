@@ -75,6 +75,8 @@ export function joinRoom(
     `UPDATE rooms
      SET guest_token = ?,
          status = 'active',
+         host_connected_at = COALESCE(host_connected_at, datetime('now')),
+         guest_connected_at = datetime('now'),
          joined_at = datetime('now'),
          last_activity_at = ?
      WHERE id = ?
@@ -101,6 +103,8 @@ export function activateRoom(db: Database, id: string): StoredRoom {
   const stmt = db.prepare(
     `UPDATE rooms
      SET status = 'active',
+         host_connected_at = COALESCE(host_connected_at, datetime('now')),
+         guest_connected_at = COALESCE(guest_connected_at, datetime('now')),
          joined_at = COALESCE(joined_at, datetime('now'))
      WHERE id = ?
      RETURNING *`,
@@ -121,16 +125,53 @@ export function closeRoom(
   reason: StoredCloseReason,
 ): void {
   const stmt = db.prepare(
-    `UPDATE rooms SET status = 'closed', closed_at = datetime('now'), close_reason = ? WHERE id = ?`,
+    `UPDATE rooms
+     SET status = 'closed',
+         closed_at = datetime('now'),
+         close_reason = ?,
+         host_connected_at = NULL,
+         guest_connected_at = NULL
+     WHERE id = ?`,
   );
   stmt.run(reason, id);
 }
 
 export function expireRoom(db: Database, id: string): void {
   const stmt = db.prepare(
-    `UPDATE rooms SET status = 'expired', closed_at = datetime('now') WHERE id = ?`,
+    `UPDATE rooms
+     SET status = 'expired',
+         closed_at = datetime('now'),
+         host_connected_at = NULL,
+         guest_connected_at = NULL
+     WHERE id = ?`,
   );
   stmt.run(id);
+}
+
+export function markRoleConnected(
+  db: Database,
+  roomId: string,
+  role: Sender,
+): void {
+  const column = role === "host" ? "host_connected_at" : "guest_connected_at";
+  db.prepare(
+    `UPDATE rooms
+     SET ${column} = datetime('now')
+     WHERE id = ?`,
+  ).run(roomId);
+}
+
+export function clearRoleConnected(
+  db: Database,
+  roomId: string,
+  role: Sender,
+): void {
+  const column = role === "host" ? "host_connected_at" : "guest_connected_at";
+  db.prepare(
+    `UPDATE rooms
+     SET ${column} = NULL
+     WHERE id = ?`,
+  ).run(roomId);
 }
 
 export function getRoomByToken(
