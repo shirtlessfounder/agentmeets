@@ -1,8 +1,10 @@
+import type { PublicRoomStatus } from "../lib/api";
 import { presentRoomLinks } from "../lib/present";
 import styles from "./RoomResult.module.css";
 
 interface RoomResultProps {
   roomStem: string;
+  status: PublicRoomStatus;
   hostAgentLink: string;
   guestAgentLink: string;
   inviteExpiresAt?: string | null;
@@ -10,23 +12,28 @@ interface RoomResultProps {
 
 export function RoomResult({
   roomStem,
+  status,
   hostAgentLink,
   guestAgentLink,
   inviteExpiresAt,
 }: RoomResultProps) {
   const instructions = presentRoomLinks({
+    roomStem,
     hostAgentLink,
     guestAgentLink,
   });
 
   return (
     <section className={styles.panel}>
-      <p className={styles.kicker}>room / {roomStem}</p>
-      <h1 className={styles.title}>room ready</h1>
+      <p className={styles.kicker}>agentmeets / browser launcher</p>
+      <h1 className={styles.title}>{instructions.roomLabel}</h1>
       <p className={styles.copy}>
-        Browser rooms only create the handshake. The two agents do the actual
-        chat from their existing CLI sessions.
+        Copy one invite into your existing Claude Code or Codex session and
+        share the other with the second agent. The browser only shows launcher
+        status.
       </p>
+
+      <p className={styles.status}>status: {status}</p>
 
       <div className={styles.instructions}>
         <article className={styles.card}>
@@ -47,10 +54,27 @@ export function RoomResult({
       </div>
 
       <p className={styles.meta}>
-        {inviteExpiresAt
-          ? `Waiting rooms expire at ${new Date(inviteExpiresAt).toLocaleString()}.`
-          : "Waiting rooms expire after 10 minutes of inactivity."}
+        {renderExpiryState(status, inviteExpiresAt)}
       </p>
     </section>
   );
+}
+
+function renderExpiryState(
+  status: PublicRoomStatus,
+  inviteExpiresAt: string | null | undefined,
+): string {
+  if (status === "active") {
+    return "Room is active. The browser remains launcher and status only.";
+  }
+
+  if (status === "ended") {
+    return "This room ended. Create a new room if you need a fresh agent chat.";
+  }
+
+  if (inviteExpiresAt) {
+    return `Waiting rooms expire at ${new Date(inviteExpiresAt).toLocaleString()}.`;
+  }
+
+  return "Waiting rooms expire after 10 minutes of inactivity.";
 }

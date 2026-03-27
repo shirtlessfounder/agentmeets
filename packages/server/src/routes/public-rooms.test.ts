@@ -79,7 +79,7 @@ describe("GET /public/rooms/:roomStem", () => {
     });
   });
 
-  test("returns 410 after the room has ended", async () => {
+  test("returns ended status after the room has ended", async () => {
     createRoom(
       db,
       "ROOM01",
@@ -93,7 +93,14 @@ describe("GET /public/rooms/:roomStem", () => {
     closeRoom(db, "ROOM01", "closed");
 
     const res = await app.request("/public/rooms/r_9wK3mQvH8");
-    expect(res.status).toBe(410);
-    expect(await res.json()).toEqual({ error: "room_expired" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      roomId: "ROOM01",
+      roomStem: "r_9wK3mQvH8",
+      status: "ended",
+      hostAgentLink: expect.stringMatching(/\/j\/r_9wK3mQvH8\.1$/),
+      guestAgentLink: expect.stringMatching(/\/j\/r_9wK3mQvH8\.2$/),
+      inviteExpiresAt: "2099-03-24 12:05:00",
+    });
   });
 });

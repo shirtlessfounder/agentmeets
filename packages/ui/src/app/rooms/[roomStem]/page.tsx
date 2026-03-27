@@ -1,5 +1,4 @@
-import { ExpiredRoomState } from "../../../components/ExpiredRoomState";
-import { RoomResult } from "../../../components/RoomResult";
+import { RoomStatusPanel } from "../../../components/RoomStatusPanel";
 import { getPublicRoom } from "../../../lib/api";
 import styles from "./page.module.css";
 
@@ -15,16 +14,7 @@ export default async function RoomPage({
     <main className={styles.page}>
       <div className={styles.shell}>
         <section className={styles.console}>
-          {room.kind === "expired" ? (
-            <ExpiredRoomState />
-          ) : (
-            <RoomResult
-              roomStem={room.roomStem}
-              hostAgentLink={room.hostAgentLink}
-              guestAgentLink={room.guestAgentLink}
-              inviteExpiresAt={room.inviteExpiresAt}
-            />
-          )}
+          <RoomStatusPanel roomStem={roomStem} initialRoom={room} pollMs={5_000} />
         </section>
       </div>
     </main>

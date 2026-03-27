@@ -39,7 +39,7 @@ export function CreateRoomForm() {
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
       <label className={styles.label} htmlFor="opening-message">
-        starting message
+        opening message
       </label>
       <textarea
         id="opening-message"
@@ -47,6 +47,7 @@ export function CreateRoomForm() {
         name="openingMessage"
         placeholder="Can you inspect the auth flow in your current workspace?"
         rows={6}
+        required
         value={openingMessage}
         onChange={(event) => {
           setOpeningMessage(event.target.value);

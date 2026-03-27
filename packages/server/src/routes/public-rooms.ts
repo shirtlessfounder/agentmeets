@@ -71,7 +71,11 @@ function isPublicRoomExpired(db: Database, room: PublicRoomRow): boolean {
     return false;
   }
 
-  if (room.room_status === "closed" || room.room_status === "expired") {
+  if (room.room_status === "closed") {
+    return false;
+  }
+
+  if (room.room_status === "expired") {
     return true;
   }
 

@@ -184,6 +184,78 @@ describe("browser room presentation", () => {
     guestWs.close();
   });
 
+  test("public room returns ended after an active room disconnects", async () => {
+    const baseUrl = `http://localhost:${port}`;
+    (roomManager as { idleTimeoutMs: number }).idleTimeoutMs = 2_000;
+
+    const createResponse = await fetch(`${baseUrl}/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ openingMessage: "Track ended browser state." }),
+    });
+    expect(createResponse.status).toBe(201);
+
+    const created = (await createResponse.json()) as {
+      roomId: string;
+      roomStem: string;
+      hostAgentLink: string;
+      guestAgentLink: string;
+    };
+    const hostInviteToken = new URL(created.hostAgentLink).pathname.split("/").pop()!;
+    const guestInviteToken = new URL(created.guestAgentLink).pathname.split("/").pop()!;
+
+    const hostClaimResponse = await fetch(`${baseUrl}/invites/${hostInviteToken}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": "browser-room-ended-host" },
+    });
+    expect(hostClaimResponse.status).toBe(200);
+    const hostClaim = (await hostClaimResponse.json()) as { sessionToken: string };
+
+    const guestClaimResponse = await fetch(`${baseUrl}/invites/${guestInviteToken}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": "browser-room-ended-guest" },
+    });
+    expect(guestClaimResponse.status).toBe(200);
+    const guestClaim = (await guestClaimResponse.json()) as { sessionToken: string };
+
+    const hostWs = new WebSocket(
+      `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${hostClaim.sessionToken}`,
+    );
+    await waitForOpen(hostWs);
+    expect(await waitForMessage(hostWs)).toMatchObject({
+      type: "message",
+      sender: "host",
+      content: "Track ended browser state.",
+    });
+
+    const hostActivationPromise = waitForMessage(hostWs);
+    const guestWs = new WebSocket(
+      `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${guestClaim.sessionToken}`,
+    );
+    const guestMessagesPromise = waitForMessages(guestWs, 2);
+    await waitForOpen(guestWs);
+
+    expect(await hostActivationPromise).toEqual({ type: "room_active", roomId: created.roomId });
+    const guestMessages = await guestMessagesPromise;
+    expect(guestMessages[0]).toMatchObject({
+      type: "message",
+      sender: "host",
+      content: "Track ended browser state.",
+    });
+    expect(guestMessages[1]).toEqual({ type: "room_active", roomId: created.roomId });
+
+    const endedPromise = waitForMessage(guestWs);
+    hostWs.close();
+    expect(await endedPromise).toEqual({ type: "ended", reason: "disconnected" });
+
+    const publicRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
+    expect(publicRoom.status).toBe(200);
+    expect(await publicRoom.json()).toMatchObject({
+      roomStem: created.roomStem,
+      status: "ended",
+    });
+  });
+
   test("public room and invite manifest return 410 after idle expiry", async () => {
     const baseUrl = `http://localhost:${port}`;
 
@@ -475,6 +547,32 @@ describe("browser room presentation", () => {
     expect(room.status).toBe("waiting");
     expect(room.closed_at).toBeNull();
     expect(room.host_connected_at).toBeNull();
+  });
+
+  test("invite links render a thin informational landing for html browsers", async () => {
+    const baseUrl = `http://localhost:${port}`;
+
+    const createResponse = await fetch(`${baseUrl}/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ openingMessage: "Thin invite landing only." }),
+    });
+    expect(createResponse.status).toBe(201);
+
+    const created = (await createResponse.json()) as {
+      hostAgentLink: string;
+    };
+    const hostInviteToken = new URL(created.hostAgentLink).pathname.split("/").pop()!;
+
+    const html = await fetch(`${baseUrl}/j/${hostInviteToken}`, {
+      headers: { accept: "text/html" },
+    });
+    expect(html.status).toBe(200);
+    expect(html.headers.get("content-type")).toContain("text/html");
+    const body = await html.text();
+    expect(body).toContain("Paste this invite into an existing Claude Code or Codex session");
+    expect(body).toContain("This browser cannot join the room");
+    expect(body).not.toContain("Send message");
   });
 
 });

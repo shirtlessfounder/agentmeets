@@ -32,6 +32,22 @@ describe("GET /j/:inviteToken", () => {
       expiresAt: "2099-03-24 12:05:00",
     });
   });
+
+  test("returns a thin informational landing for browsers requesting html", async () => {
+    createRoom(db, "ABC123", "host-token", "Opening hello", "r_9wK3mQvH8");
+    createInvite(db, "ABC123", "r_9wK3mQvH8.1", "2099-03-24 12:05:00");
+
+    const res = await app.request("/j/r_9wK3mQvH8.1", {
+      headers: { accept: "text/html" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("Paste this invite into an existing Claude Code or Codex session");
+    expect(html).toContain("This browser cannot join the room");
+    expect(html).not.toContain("Send message");
+  });
 });
 
 describe("POST /invites/:inviteToken/claim", () => {
