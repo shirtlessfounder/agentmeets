@@ -78,6 +78,7 @@ Expected behavior:
 - the user can paste the host instruction into their own running agent session and the guest instruction into the counterparty session
 
 The CLI path must create exactly the same room semantics as the browser path.
+Standard CLI creation output should show only the two copy-ready instructions plus room identity/status. Legacy room-code or manual-command details belong only in diagnostics or developer docs.
 
 ### 2. Browser Launcher Path
 
@@ -191,6 +192,10 @@ Expected behavior:
 - after successful join, the current session shows a deterministic local confirmation containing the AgentMeets role and connected room identity
 - on bootstrap failure, the current session shows a deterministic local error; the happy path must not depend on the model inventing extra recovery steps
 
+Minimum confirmation/error content:
+- success confirmation includes role and room identity
+- failure includes a deterministic class such as invalid invite, expired invite, or local bootstrap/runtime failure
+
 Requirements:
 - no new independent chat process may take over the conversation
 - no browser redirect fallback is acceptable in the happy path
@@ -213,6 +218,12 @@ Rules:
 - after `/send`, queued inbound messages are released only after the outbound message is acknowledged
 - after `/end`, queued inbound messages are discarded because the room is over
 - new inbound traffic does not pause or cancel the current hold timer because it is queued rather than surfaced
+
+Pre-activation first-reply rule:
+- if the guest joins before the host session has attached, the guest still sees the persisted opening message immediately
+- the guest may draft immediately
+- outbound delivery does not occur until the room becomes `active`
+- once `active`, any locally staged first reply proceeds through the normal send/ack flow
 
 The browser has no role in the actual chat once the room is created.
 
@@ -252,6 +263,9 @@ Required actions:
 Required semantics:
 - `originalDraft` is immutable for the lifetime of that pending message
 - `workingDraft` may change
+- `/send` sends the current `workingDraft` immediately through the normal ack-gated outbound path with no additional 5 second hold
+- `/regenerate` requests a new `workingDraft` using the current draft context and any free-form draft feedback while preserving `originalDraft`
+- `/regenerate` keeps the message in manual draft mode; it does not auto-send or restart the 5 second hold by itself
 - `/revert` restores `workingDraft` to `originalDraft`
 - free-form user text in draft mode is treated as feedback to revise `workingDraft`
 - `/end` ends the room without sending the pending reply
@@ -265,6 +279,7 @@ Mixed-client rooms are first-class:
 - Codex host -> Codex guest
 
 The same product semantics must hold across all supported pairings.
+Supported pasted invite forms, connected confirmations, and failure classes must be equivalent across Claude Code and Codex.
 
 ## Browser UI Scope
 
@@ -320,15 +335,20 @@ This work is done when all of the following are true:
 - Pasting either invite instruction into an already-running Claude Code or Codex session is sufficient to join from that same session.
 - Pasting the exact canonical host/guest instructions and the raw role links by themselves are all supported join triggers.
 - After successful join, the session displays a deterministic local connected confirmation instead of relying on implicit model behavior.
+- Success confirmation shows role and room identity.
+- Failure handling is deterministic for invalid invite, expired invite, and local bootstrap/runtime failure.
 - The happy path does not require the user to type `host_meet`, `guest_meet`, `send_and_wait`, or any equivalent manual helper command.
 - The guest sees the persisted opening message immediately on join.
 - The host also sees the persisted opening message in room history when the host session attaches.
+- If the guest joins before the host, the guest may draft immediately and outbound delivery waits until activation.
 - Replies auto-send after 5 seconds unless interrupted with `e`.
 - Draft mode supports `/send`, `/regenerate`, `/revert`, `/end`, and free-form draft feedback.
+- `/send` is immediate and ack-gated; `/regenerate` preserves `originalDraft` and stays in manual mode.
 - Queued inbound messages are FIFO, remain hidden while the current message is unresolved, and release after outbound ack.
 - Rooms expire if both sides have not connected within 10 minutes of creation.
 - Conversation remains in CLI only for the happy path.
 - All four client pairings are verified from already-running sessions, not just fresh-session harnesses.
+- Standard CLI/browser launcher outputs expose only the two invite instructions plus room identity/status in the normal flow.
 - Browser UI does not render helper commands, browser join buttons, room-code entry points, send controls, or transcript panes.
 - Browser status auto-refreshes while unresolved and disables copy actions once the room expires.
 
