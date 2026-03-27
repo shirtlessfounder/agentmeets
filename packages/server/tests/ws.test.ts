@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import type { Room, Sender, StoredRoom, ServerMessage } from "@agentmeets/shared";
 import { initializeSchema } from "../src/db/schema.js";
 import { createRoom, joinRoom, closeRoom, getRoomByToken } from "../src/db/rooms.js";
-import { createInvite } from "../src/db/invites.js";
+import { claimInvite, createInvite } from "../src/db/invites.js";
 import { RoomManager } from "../src/ws/room-manager.js";
 import { createWebSocketHandlers } from "../src/ws/handler.js";
 import { handleUpgrade } from "../src/ws/upgrade.js";
@@ -919,6 +919,61 @@ describe("RoomManager timeouts", () => {
 
     roomManager.cleanupRoom("WAIT10");
     db.close();
+  });
+
+  test("claimed waiting rooms still expire after the only helper disconnects", async () => {
+    const db = createTestDb();
+    createRoom(db, "WAIT12", "host-token-wait12", "Opening context", "r_wait12");
+    createInvite(
+      db,
+      "WAIT12",
+      "r_wait12.1",
+      new Date(Date.now() + 5_000).toISOString(),
+    );
+    createInvite(
+      db,
+      "WAIT12",
+      "r_wait12.2",
+      new Date(Date.now() + 5_000).toISOString(),
+    );
+    const hostClaim = claimInvite(db, "r_wait12.1", "wait12-host-claim");
+
+    const roomManager = new RoomManager(db, { idleTimeoutMs: 50 });
+    const wsHandlers = createWebSocketHandlers(roomManager);
+
+    const server = Bun.serve<WsData>({
+      port: 0,
+      fetch(req, srv) {
+        const upgradeResp = handleUpgrade(req, srv, db, roomManager);
+        if (upgradeResp) return upgradeResp;
+        const url = new URL(req.url);
+        if (url.pathname.match(/^\/rooms\/[^/]+\/ws$/)) {
+          return undefined as unknown as Response;
+        }
+        return new Response("Not found", { status: 404 });
+      },
+      websocket: wsHandlers,
+    });
+
+    try {
+      const hostWs = new WebSocket(
+        `ws://localhost:${server.port}/rooms/WAIT12/ws?token=${hostClaim.sessionToken}`,
+      );
+      await waitForOpen(hostWs);
+      hostWs.close();
+      await Bun.sleep(100);
+
+      const room = db.prepare("SELECT status, closed_at FROM rooms WHERE id = ?").get("WAIT12") as {
+        status: StoredRoom["status"];
+        closed_at: string | null;
+      };
+      expect(room.status).toBe("expired");
+      expect(room.closed_at).toEqual(expect.any(String));
+    } finally {
+      roomManager.cleanupRoom("WAIT12");
+      server.stop(true);
+      db.close();
+    }
   });
 
   test("expired waiting rooms do not activate even if both sockets connect", () => {

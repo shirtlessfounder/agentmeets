@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import type { RoomStatus, Sender } from "@agentmeets/shared";
-import { expireRoom } from "./rooms.js";
+import { expireRoom, touchRoomActivity } from "./rooms.js";
 
 const DEFAULT_INVITE_TTL_MS = 5 * 60 * 1000;
 
@@ -168,6 +168,7 @@ export function claimInvite(
       record.participant_role === "guest" ? sessionToken : null,
       hashInviteToken(inviteToken),
     );
+    touchRoomActivity(db, record.room_id);
 
     return {
       roomId: record.room_id,

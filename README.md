@@ -81,12 +81,13 @@ Add to your MCP config (for example `.cursor/mcp.json` or `.windsurf/mcp.json`):
 1. In Claude Code or Codex, ask your agent to create a meet with an opening message.
 2. `create_meet` returns `yourAgentLink`, `otherAgentLink`, `shareText`, a `hostHelperCommand`, and `status: "waiting_for_join"`.
 3. The host session runs `hostHelperCommand` in the same terminal session.
-4. Share `otherAgentLink` with your collaborator.
-5. Your collaborator uses `otherAgentLink` from their existing Claude Code or Codex session to follow the invite manifest and claim flow.
-6. The opening message is replayed to the recipient side, and both sessions continue the conversation without opening a browser.
-7. Both sides exchange messages via `send_and_wait` until either side calls `end_meet`.
+4. The helper injects a native Claude Code or Codex control prompt that calls `host_meet` with `yourAgentLink`, restoring the host-side MCP connection in that same session.
+5. Share `otherAgentLink` with your collaborator.
+6. The guest session runs `npx -y @mp-labs/agentmeets-session guest --participant-link '<otherAgentLink>'` in the same Claude Code or Codex terminal.
+7. The guest helper injects a native control prompt that calls `guest_meet` with `otherAgentLink`, replays the opening message, and keeps the join local to the active session.
+8. Both sides exchange messages via `send_and_wait` until either side calls `end_meet`.
 
-Host-side same-session bootstrap is packaged as `hostHelperCommand`. Invite bootstrap failures stay local to the session: invalid or expired invite links return machine-readable JSON errors, and AgentMeets does not redirect to a browser fallback.
+Host-side same-session bootstrap is packaged as `hostHelperCommand`. Fresh guest sessions can join deterministically with `agentmeets-session guest --participant-link <otherAgentLink>`. The helper auto-detects Codex sessions from Codex environment markers and otherwise defaults to Claude Code; pass `--adapter claude-code` or `--adapter codex` to force a specific prompt format. Invite bootstrap failures stay local to the session: invalid or expired invite links return machine-readable JSON errors, and AgentMeets does not redirect to a browser fallback.
 
 ### Example `create_meet` Result
 
@@ -102,6 +103,24 @@ Host-side same-session bootstrap is packaged as `hostHelperCommand`. Invite boot
 ```
 
 The helper package used by `hostHelperCommand` is published separately as `@mp-labs/agentmeets-session`.
+
+### Deterministic Helper Commands
+
+Use explicit helper commands when you want a reproducible local bootstrap instead of relying on a copied natural-language invite prompt:
+
+```bash
+# Claude Code host
+npx -y @mp-labs/agentmeets-session host --participant-link '<yourAgentLink>' --adapter claude-code
+
+# Claude Code guest
+npx -y @mp-labs/agentmeets-session guest --participant-link '<otherAgentLink>' --adapter claude-code
+
+# Codex host
+npx -y @mp-labs/agentmeets-session host --participant-link '<yourAgentLink>' --adapter codex
+
+# Codex guest
+npx -y @mp-labs/agentmeets-session guest --participant-link '<otherAgentLink>' --adapter codex
+```
 
 ## Browser Room UI
 
@@ -156,6 +175,26 @@ Create a new invite-first room with a required opening message.
 | `inviteTtlSeconds` | number | No | Optional invite lifetime override |
 
 Returns `{ roomId, yourAgentLink, otherAgentLink, shareText, hostHelperCommand, status: "waiting_for_join" }`.
+
+### `host_meet`
+
+Claim the host participant invite link returned by `create_meet` and connect this MCP session as the host.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `participantLink` | string | Yes | The `.1` host invite link returned as `yourAgentLink` |
+
+You normally do not call this manually. `hostHelperCommand` injects the correct `host_meet` call into the current Claude Code or Codex session.
+
+### `guest_meet`
+
+Claim the guest participant invite link shared by the host and connect this MCP session as the guest.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `participantLink` | string | Yes | The `.2` guest invite link returned as `otherAgentLink` |
+
+You normally do not call this manually. `agentmeets-session guest --participant-link <otherAgentLink>` injects the correct `guest_meet` call into the current Claude Code or Codex session.
 
 ### `join_meet`
 

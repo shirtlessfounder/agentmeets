@@ -72,9 +72,15 @@ export function joinRoom(
   }
 
   const stmt = db.prepare(
-    `UPDATE rooms SET guest_token = ?, status = 'active', joined_at = datetime('now') WHERE id = ? RETURNING *`,
+    `UPDATE rooms
+     SET guest_token = ?,
+         status = 'active',
+         joined_at = datetime('now'),
+         last_activity_at = ?
+     WHERE id = ?
+     RETURNING *`,
   );
-  return stmt.get(guestToken, id) as StoredRoom;
+  return stmt.get(guestToken, new Date().toISOString(), id) as StoredRoom;
 }
 
 export function activateRoom(db: Database, id: string): StoredRoom {
@@ -100,6 +106,13 @@ export function activateRoom(db: Database, id: string): StoredRoom {
      RETURNING *`,
   );
   return stmt.get(id) as StoredRoom;
+}
+
+export function touchRoomActivity(db: Database, id: string): void {
+  db.prepare(`UPDATE rooms SET last_activity_at = ? WHERE id = ?`).run(
+    new Date().toISOString(),
+    id,
+  );
 }
 
 export function closeRoom(

@@ -6,6 +6,7 @@ export type SessionAdapterName = "claude-code" | "codex";
 
 interface HostBootstrapAdapter {
   injectHostReadyPrompt: (input: { participantLink: string }) => Promise<void>;
+  injectGuestReadyPrompt: (input: { participantLink: string }) => Promise<void>;
 }
 
 interface CreateSessionAdapterOptions {
@@ -14,6 +15,7 @@ interface CreateSessionAdapterOptions {
 }
 
 interface CliEnvironment {
+  env: Record<string, string | undefined>;
   stdout: Pick<typeof process.stdout, "write">;
   stderr: Pick<typeof process.stderr, "write">;
   openTty: () => number;
@@ -28,6 +30,7 @@ const HELP_TEXT = `agentmeets-session
 
 Usage:
   agentmeets-session host --participant-link <url> [--adapter claude-code|codex]
+  agentmeets-session guest --participant-link <url> [--adapter claude-code|codex]
   agentmeets-session --help
 
 Description:
@@ -37,6 +40,7 @@ Description:
 `;
 
 const defaultCliEnvironment: CliEnvironment = {
+  env: process.env,
   stdout: process.stdout,
   stderr: process.stderr,
   openTty() {
@@ -63,24 +67,29 @@ export async function main(
   }
 
   if (argv[0] === "host") {
-    return runHost(argv.slice(1), environment);
+    return runBootstrap("host", argv.slice(1), environment);
+  }
+
+  if (argv[0] === "guest") {
+    return runBootstrap("guest", argv.slice(1), environment);
   }
 
   environment.stderr.write(`Unknown arguments: ${argv.join(" ")}\n\n${HELP_TEXT}`);
   return 1;
 }
 
-async function runHost(
+async function runBootstrap(
+  role: "host" | "guest",
   argv: string[],
   environment: CliEnvironment,
 ): Promise<number> {
   const options = parseFlags(argv);
   const participantLink = options["participant-link"];
-  const adapterName = (options.adapter ?? "claude-code") as string;
+  const adapterName = resolveSessionAdapterName(options.adapter, environment.env);
 
   if (!participantLink) {
     environment.stderr.write(
-      "Missing required host argument: --participant-link\n",
+      `Missing required ${role} argument: --participant-link\n`,
     );
     return 1;
   }
@@ -108,9 +117,15 @@ async function runHost(
       },
     });
 
-    await adapter.injectHostReadyPrompt({
-      participantLink,
-    });
+    if (role === "host") {
+      await adapter.injectHostReadyPrompt({
+        participantLink,
+      });
+    } else {
+      await adapter.injectGuestReadyPrompt({
+        participantLink,
+      });
+    }
     return 0;
   } finally {
     environment.closeTty(ttyFd);
@@ -149,6 +164,26 @@ function parseFlags(argv: string[]): Record<string, string> {
   return options;
 }
 
+export function resolveSessionAdapterName(
+  explicitAdapter: string | undefined,
+  env: Record<string, string | undefined>,
+): string {
+  if (explicitAdapter) {
+    return explicitAdapter;
+  }
+
+  const configuredAdapter = env.AGENTMEETS_SESSION_ADAPTER?.trim();
+  if (configuredAdapter) {
+    return configuredAdapter;
+  }
+
+  if (hasCodexSessionMarkers(env)) {
+    return "codex";
+  }
+
+  return "claude-code";
+}
+
 function formatError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -159,6 +194,12 @@ function formatError(error: unknown): string {
 
 function isSessionAdapterName(value: string): value is SessionAdapterName {
   return value === "claude-code" || value === "codex";
+}
+
+function hasCodexSessionMarkers(
+  env: Record<string, string | undefined>,
+): boolean {
+  return Boolean(env.CODEX_THREAD_ID || env.CODEX_MANAGED_BY_NPM);
 }
 
 const isDirectExecution = import.meta.url === `file://${process.argv[1]}`;

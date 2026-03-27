@@ -236,6 +236,7 @@ describe("browser room presentation", () => {
 
   test("claimed invite sessions can still activate after the original invite TTL elapses", async () => {
     const baseUrl = `http://localhost:${port}`;
+    (roomManager as any).idleTimeoutMs = 2_000;
 
     const createResponse = await fetch(`${baseUrl}/rooms`, {
       method: "POST",
@@ -286,6 +287,53 @@ describe("browser room presentation", () => {
 
     hostWs.close();
     guestWs.close();
+  });
+
+  test("claimed rooms expire after a disconnect and surface as expired over HTTP", async () => {
+    const baseUrl = `http://localhost:${port}`;
+
+    const createResponse = await fetch(`${baseUrl}/rooms`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ openingMessage: "Claim, connect once, then abandon." }),
+    });
+    expect(createResponse.status).toBe(201);
+
+    const created = (await createResponse.json()) as {
+      roomId: string;
+      roomStem: string;
+      hostAgentLink: string;
+    };
+    const hostInviteToken = new URL(created.hostAgentLink).pathname.split("/").pop()!;
+
+    const hostClaimResponse = await fetch(`${baseUrl}/invites/${hostInviteToken}/claim`, {
+      method: "POST",
+      headers: { "Idempotency-Key": "claimed-disconnect-expiry-host" },
+    });
+    expect(hostClaimResponse.status).toBe(200);
+    const hostClaim = (await hostClaimResponse.json()) as { sessionToken: string };
+
+    const hostWs = new WebSocket(
+      `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${hostClaim.sessionToken}`,
+    );
+    await waitForOpen(hostWs);
+    hostWs.close();
+
+    await Bun.sleep(100);
+
+    const manifest = await fetch(`${baseUrl}/j/${hostInviteToken}`);
+    expect(manifest.status).toBe(410);
+    expect(await manifest.json()).toEqual({ error: "invite_expired" });
+
+    const publicRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
+    expect(publicRoom.status).toBe(410);
+    expect(await publicRoom.json()).toEqual({ error: "room_expired" });
+
+    const room = db
+      .prepare("SELECT status, closed_at FROM rooms WHERE id = ?")
+      .get(created.roomId) as Pick<StoredRoom, "status" | "closed_at">;
+    expect(room.status).toBe("expired");
+    expect(room.closed_at).toEqual(expect.any(String));
   });
 
 });

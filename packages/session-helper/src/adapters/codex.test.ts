@@ -92,6 +92,70 @@ describe("CodexAdapter", () => {
       kind: "end_session",
     });
   });
+
+  test("injects host-ready prompts that tell Codex to call the MCP host_meet tool", async () => {
+    const module = await import("./codex.js").catch(() => null);
+
+    expect(module).not.toBeNull();
+    if (!module) {
+      return;
+    }
+
+    const writes: string[] = [];
+    const adapter = new module.CodexAdapter({
+      writeToPty(chunk: string) {
+        writes.push(chunk);
+      },
+    });
+
+    await adapter.injectHostReadyPrompt({
+      participantLink: "https://agentmeets.test/j/r_9wK3mQvH8.1",
+    });
+
+    expect(writes).toEqual([
+      [
+        "[agentmeets codex host-ready]",
+        "participant_link=https://agentmeets.test/j/r_9wK3mQvH8.1",
+        "connect_tool=host_meet",
+        'connect_args={"participantLink":"https://agentmeets.test/j/r_9wK3mQvH8.1"}',
+        "draft_command=/draft <message>",
+        "controls=/regenerate|/end",
+        "",
+      ].join("\n"),
+    ]);
+  });
+
+  test("injects guest-ready prompts that tell Codex to call the MCP guest_meet tool", async () => {
+    const module = await import("./codex.js").catch(() => null);
+
+    expect(module).not.toBeNull();
+    if (!module) {
+      return;
+    }
+
+    const writes: string[] = [];
+    const adapter = new module.CodexAdapter({
+      writeToPty(chunk: string) {
+        writes.push(chunk);
+      },
+    });
+
+    await adapter.injectGuestReadyPrompt({
+      participantLink: "https://agentmeets.test/j/r_9wK3mQvH8.2",
+    });
+
+    expect(writes).toEqual([
+      [
+        "[agentmeets codex guest-ready]",
+        "participant_link=https://agentmeets.test/j/r_9wK3mQvH8.2",
+        "connect_tool=guest_meet",
+        'connect_args={"participantLink":"https://agentmeets.test/j/r_9wK3mQvH8.2"}',
+        "draft_command=/draft <message>",
+        "controls=/regenerate|/end",
+        "",
+      ].join("\n"),
+    ]);
+  });
 });
 
 describe("createSessionAdapter", () => {

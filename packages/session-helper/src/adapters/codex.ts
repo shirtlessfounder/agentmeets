@@ -147,10 +147,40 @@ export class CodexAdapter implements SessionAdapter {
   }: {
     participantLink: string;
   }): Promise<void> {
+    await this.#writeReadyPrompt({
+      promptKind: "host-ready",
+      participantLink,
+      connectTool: "host_meet",
+    });
+  }
+
+  async injectGuestReadyPrompt({
+    participantLink,
+  }: {
+    participantLink: string;
+  }): Promise<void> {
+    await this.#writeReadyPrompt({
+      promptKind: "guest-ready",
+      participantLink,
+      connectTool: "guest_meet",
+    });
+  }
+
+  async #writeReadyPrompt({
+    promptKind,
+    participantLink,
+    connectTool,
+  }: {
+    promptKind: "host-ready" | "guest-ready";
+    participantLink: string;
+    connectTool: "host_meet" | "guest_meet";
+  }): Promise<void> {
     await this.#writeToPty(
       [
-        "[agentmeets codex host-ready]",
+        `[agentmeets codex ${promptKind}]`,
         `participant_link=${participantLink}`,
+        `connect_tool=${connectTool}`,
+        `connect_args={"participantLink":"${participantLink}"}`,
         `draft_command=${this.#draftCommand}`,
         "controls=/regenerate|/end",
         "",

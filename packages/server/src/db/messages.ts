@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import type { Message, Sender } from "@agentmeets/shared";
+import { touchRoomActivity } from "./rooms.js";
 
 export function saveMessage(
   db: Database,
@@ -10,13 +11,10 @@ export function saveMessage(
   const insertMessage = db.prepare(
     `INSERT INTO messages (room_id, sender, content) VALUES (?, ?, ?) RETURNING *`,
   );
-  const touchRoom = db.prepare(
-    `UPDATE rooms SET last_activity_at = datetime('now') WHERE id = ?`,
-  );
 
   return db.transaction(() => {
     const message = insertMessage.get(roomId, sender, content) as Message;
-    touchRoom.run(roomId);
+    touchRoomActivity(db, roomId);
     return message;
   })();
 }
