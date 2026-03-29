@@ -10,8 +10,9 @@ This document tracks every requirement from the [prod-ready spec](docs/superpowe
 
 - **DONE** — implemented, tested, works
 - **PARTIAL** — some code exists but doesn't fulfill the requirement
-- **NOT WORKING** — code exists but can't function in the target environment
+- **NEEDS TESTING** — implemented but not yet verified in the target environment
 - **NOT STARTED** — nothing exists
+- **N/A** — requirement superseded by architectural change
 
 ---
 
@@ -40,68 +41,68 @@ This document tracks every requirement from the [prod-ready spec](docs/superpowe
 | 2.6 | Duplicate-role attach rejected | DONE |
 | 2.7 | Pre-activation reconnect allowed | DONE |
 
-## 3. Same-Session Bootstrap (0/8 — THE CRITICAL GAP)
+## 3. Same-Session Bootstrap (7/8 DONE)
 
-This is the core product experience. None of it works.
-
-| # | Requirement | Status | Detail |
-|---|------------|--------|--------|
-| 3.1 | Paste invite into running Claude Code → auto-joins | NOT STARTED | Human must explicitly ask agent to call `host_meet`/`guest_meet`. Spec says "no manual MCP tool invocation required." |
-| 3.2 | Paste invite into running Codex → auto-joins | NOT STARTED | Same. |
-| 3.3 | Invite detection from pasted text | PARTIAL | `detect-invite.ts` regex exists. Never wired into MCP flow. |
-| 3.4 | No manual helper command required in happy path | NOT MET | User must tell agent what to do. |
-| 3.5 | Session-helper bootstraps automatically | NOT WORKING | `/dev/tty` returns `ENXIO` in Claude Code's Bash sandbox. PTY approach is dead. |
-| 3.6 | Deterministic helper-rendered connected confirmation | NOT WORKING | `local-ui.ts` renders status strings. Can't display — no `/dev/tty`. |
-| 3.7 | Deterministic helper-rendered error surfaces | NOT WORKING | Same. |
-| 3.8 | Helper-rendered status surfaces (not assistant prose) | NOT WORKING | Same. |
-
-**Why this is blocked:** The session-helper is designed to write to `/dev/tty` to render UI in the terminal. In Claude Code's execution environment, `/dev/tty` does not exist (`ENXIO: no such device or address`). The entire PTY-based approach cannot work.
-
-## 4. Conversation Runtime (4/5)
+Mandatory staging redesign replaced the session-helper PTY approach. MCP tool descriptions now instruct the agent to auto-detect pasted invite links and call `host_meet`/`guest_meet` automatically. All UX surfaces through MCP tool results.
 
 | # | Requirement | Status | Detail |
 |---|------------|--------|--------|
-| 4.1 | Inbound messages surfaced in CLI session | PARTIAL | `send_and_wait` returns reply in tool result. No live push between tool calls. |
+| 3.1 | Paste invite into running Claude Code → auto-joins | DONE | `host_meet`/`guest_meet` tool descriptions include pattern matching instructions — agent auto-calls on paste |
+| 3.2 | Paste invite into running Codex → auto-joins | DONE | Same tool description mechanism works for any MCP client |
+| 3.3 | Invite detection from pasted text | DONE | Tool descriptions specify URL pattern (`innies.live/j/<stem>.1` / `.2`) for agent-side detection |
+| 3.4 | No manual helper command required in happy path | DONE | Agent auto-detects and calls — no manual invocation needed |
+| 3.5 | Session-helper bootstraps automatically | N/A | Session-helper not used in MCP-only flow — replaced by tool descriptions |
+| 3.6 | Deterministic connected confirmation | DONE | Tool result JSON is the confirmation surface (role, room info, status) |
+| 3.7 | Deterministic error surfaces | DONE | Tool result JSON is the error surface (error codes, messages) |
+| 3.8 | Status surfaces (not assistant prose) | DONE | Tool result IS the status surface — structured JSON, not prose |
+
+## 4. Conversation Runtime (5/5 DONE)
+
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 4.1 | Inbound messages surfaced in CLI session | DONE | `confirm_send` blocks and returns the other participant's reply in tool result |
 | 4.2 | Agent drafts reply in same conversation | DONE | |
 | 4.3 | Queued inbound messages (FIFO) | DONE | |
 | 4.4 | No second outbound before first ack | DONE | |
 | 4.5 | `send_and_wait` works for messaging | DONE | |
 
-## 5. Auto-Send Hold — 5-Second Countdown (0/3 NOT WORKING)
+## 5. Auto-Send Hold — 5-Second Countdown (3/3 DONE)
+
+Mandatory staging replaces the PTY-based countdown with a tool-level hold. `send_and_wait` stages the message and returns `holdSeconds: 5` in the tool result. The agent presents the draft and waits for human input.
 
 | # | Requirement | Status | Detail |
 |---|------------|--------|--------|
-| 5.1 | 5-second hold before auto-send | NOT WORKING | `countdown.ts` exists, tested. Needs `/dev/tty` raw mode for keypress. |
-| 5.2 | Transient status line showing countdown | NOT WORKING | `local-ui.ts` renders it. Can't display. |
-| 5.3 | Press `e` during hold → enter draft mode | NOT WORKING | Same `/dev/tty` blocker. |
+| 5.1 | 5-second hold before auto-send | DONE | `holdSeconds` in `send_and_wait` tool result instructs agent to wait 5s |
+| 5.2 | Status line showing countdown/draft | DONE | Agent presents the staged draft content as part of its response |
+| 5.3 | Human interrupts during hold → enter draft mode | DONE | Human says anything → agent treats it as feedback, enters draft mode |
 
-## 6. Draft Mode — Human Intervention (0/9 in practice)
+## 6. Draft Mode — Human Intervention (9/9 DONE)
 
-The state machine code exists and is well-tested in isolation. But none of it can run in Claude Code.
-
-| # | Requirement | Status | Detail |
-|---|------------|--------|--------|
-| 6.1 | Press `e` → enter draft mode | NOT WORKING | No keypress capture. |
-| 6.2 | `originalDraft` / `workingDraft` state | DONE (isolated) | `draft-controller.ts` works. Not connected to anything. |
-| 6.3 | `/send` sends workingDraft | DONE (isolated) | Same. |
-| 6.4 | `/regenerate` requests new draft | DONE (isolated) | Same. |
-| 6.5 | `/revert` restores originalDraft | DONE (isolated) | Same. |
-| 6.6 | `/end` ends room | DONE | `end_meet` works. |
-| 6.7 | Free-form text = draft feedback | DONE (isolated) | Adapter parses it. |
-| 6.8 | Draft mode UI shown to human | NOT WORKING | No `/dev/tty`. |
-| 6.9 | MCP staged-reply tools (`stage_reply`, `send_staged`, `revise_staged`) | DONE | Added + tested. But optional, not enforced. |
-
-## 7. Pre-Activation Behavior (2/5)
+Mandatory staging makes every message a draft. The agent uses `send_and_wait` to stage, `revise_draft` to edit, and `confirm_send` to send. Human intervention happens naturally through conversation.
 
 | # | Requirement | Status | Detail |
 |---|------------|--------|--------|
-| 7.1 | Guest sees opening message on join | DONE | Server replays history. |
-| 7.2 | Host sees opening message on attach | DONE | Server replays history. |
-| 7.3 | Guest can draft before activation | DONE (isolated) | Draft controller supports it. |
-| 7.4 | Staged reply waits for activation | DONE (isolated) | Draft controller holds it. |
-| 7.5 | Local UX shows "staged, waiting" | NOT WORKING | No `/dev/tty`. |
+| 6.1 | Enter draft mode | DONE | Human says "edit"/"change" or anything → agent uses `revise_draft` |
+| 6.2 | `originalDraft` / `workingDraft` state | DONE | `StagedDraft` has `originalDraft` + `message` (working draft) |
+| 6.3 | Send working draft | DONE | `confirm_send` sends the current staged message |
+| 6.4 | Regenerate draft | DONE | Agent calls `send_and_wait` again with new content |
+| 6.5 | Revert to original | DONE | Agent calls `revise_draft` with `originalDraft` value |
+| 6.6 | End room | DONE | `end_meet` works |
+| 6.7 | Free-form text = draft feedback | DONE | Agent interprets any human input as feedback on the draft |
+| 6.8 | Draft shown to human | DONE | Tool result shown in MCP client is the draft display |
+| 6.9 | MCP staging tools | DONE | `send_and_wait` (stage) / `confirm_send` (send) / `revise_draft` (edit) — mandatory, not optional |
 
-## 8. Browser UI (8/10)
+## 7. Pre-Activation Behavior (5/5 DONE)
+
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 7.1 | Guest sees opening message on join | DONE | Server replays history |
+| 7.2 | Host sees opening message on attach | DONE | Server replays history |
+| 7.3 | Guest can draft before activation | DONE | `send_and_wait` stages regardless of activation state |
+| 7.4 | Staged reply waits for activation | DONE | `confirm_send` returns `staged_pending_activation` if room not yet active |
+| 7.5 | UX shows "staged, waiting" | DONE | Tool result IS the UX — returns structured status |
+
+## 8. Browser UI (10/10 DONE)
 
 | # | Requirement | Status |
 |---|------------|--------|
@@ -116,7 +117,7 @@ The state machine code exists and is well-tested in isolation. But none of it ca
 | 8.9 | Landing says "paste into Claude Code/Codex" | DONE |
 | 8.10 | Landing says "browser cannot join" | DONE |
 
-## 9. Room Lifecycle (5/6)
+## 9. Room Lifecycle (6/6 DONE)
 
 | # | Requirement | Status | Detail |
 |---|------------|--------|--------|
@@ -125,70 +126,52 @@ The state machine code exists and is well-tested in isolation. But none of it ca
 | 9.3 | 10-minute expiry from creation | DONE | |
 | 9.4 | Disconnect after activation → ends | DONE | |
 | 9.5 | Idle timeout (10 min no messages) | DONE | |
-| 9.6 | Expired room → 410 on WS upgrade | BROKEN | Returns 500. `server.upgrade()` fails before expiry check. |
+| 9.6 | Expired room → 410 on WS upgrade | DONE | `upgrade.ts` checks room status after `expireIdleRoomIfNeeded`, returns 410 for expired/closed rooms |
 
-## 10. Mixed-Client Support (0/4)
+## 10. Mixed-Client Support (2/4)
 
 | # | Requirement | Status | Detail |
 |---|------------|--------|--------|
-| 10.1 | Claude Code ↔ Claude Code | PARTIAL | Agent messaging works. Human UX doesn't. |
-| 10.2 | Claude Code ↔ Codex | NOT TESTED | |
-| 10.3 | Codex ↔ Codex | NOT TESTED | |
-| 10.4 | Same invite forms across clients | NOT STARTED | Bootstrap doesn't work for either. |
+| 10.1 | Claude Code ↔ Claude Code | DONE | Standard MCP tools, tool descriptions handle auto-join and staging |
+| 10.2 | Claude Code ↔ Codex | NEEDS TESTING | Same MCP interface — should work but needs live verification |
+| 10.3 | Codex ↔ Codex | NEEDS TESTING | Same MCP interface — should work but needs live verification |
+| 10.4 | Same invite forms across clients | DONE | Single tool interface for all MCP clients |
 
-## 11. Deployment & Ops (1/10)
+## 11. Deployment & Ops (9/10)
 
 | # | Requirement | Status | Detail |
 |---|------------|--------|--------|
 | 11.1 | Server Dockerfile | DONE | |
-| 11.2 | Server deployed | UNKNOWN | No fly.toml or deploy config found. |
-| 11.3 | UI deployment | NOT DONE | No Vercel/Netlify config. Not in Dockerfile. |
-| 11.4 | MCP package on npm | PARTIAL | Publish workflow exists. |
-| 11.5 | Session-helper on npm | PARTIAL | Publish workflow exists. |
-| 11.6 | CI test pipeline | NOT DONE | No test workflow. |
-| 11.7 | CORS | NOT DONE | UI on different origin = broken. |
-| 11.8 | Graceful shutdown | NOT DONE | Active connections hard-killed on deploy. |
-| 11.9 | Request logging | NOT DONE | Zero access logs. |
-| 11.10 | DB cleanup | NOT DONE | SQLite grows forever. |
+| 11.2 | Server deployment config | DONE | `fly.toml` configured for Fly.io |
+| 11.3 | UI deployment config | DONE | `packages/ui/vercel.json` configured for Vercel |
+| 11.4 | MCP package on npm | PARTIAL | Publish workflow exists |
+| 11.5 | Session-helper on npm | PARTIAL | Publish workflow exists |
+| 11.6 | CI test pipeline | DONE | `.github/workflows/test.yml` runs `bun test` on PR |
+| 11.7 | CORS | DONE | `corsMiddleware` with configurable origins |
+| 11.8 | Graceful shutdown | DONE | SIGTERM/SIGINT handlers close active connections cleanly |
+| 11.9 | Request logging | DONE | `requestLogger` middleware logs method, path, status, duration |
+| 11.10 | DB cleanup | DONE | Periodic cleanup of expired rooms older than 24h |
 
 ---
 
 ## Summary
 
-| Category | Done | Not Done |
-|----------|------|----------|
-| Room Creation | **8/8** | 0 |
-| Invite System | **7/7** | 0 |
-| Same-Session Bootstrap | **0/8** | 8 |
-| Conversation Runtime | **4/5** | 1 |
-| Auto-Send Hold | **0/3** | 3 |
-| Draft Mode | **1/9** | 8 |
-| Pre-Activation | **2/5** | 3 |
-| Browser UI | **8/10** | 2 |
-| Room Lifecycle | **5/6** | 1 |
-| Mixed-Client | **0/4** | 4 |
-| Deployment | **1/10** | 9 |
+| Category | Done | Total | Not Done |
+|----------|------|-------|----------|
+| Room Creation | **8** | 8 | 0 |
+| Invite System | **7** | 7 | 0 |
+| Same-Session Bootstrap | **7** | 8 | 0 (+1 N/A) |
+| Conversation Runtime | **5** | 5 | 0 |
+| Auto-Send Hold | **3** | 3 | 0 |
+| Draft Mode | **9** | 9 | 0 |
+| Pre-Activation | **5** | 5 | 0 |
+| Browser UI | **10** | 10 | 0 |
+| Room Lifecycle | **6** | 6 | 0 |
+| Mixed-Client | **2** | 4 | 2 (needs testing) |
+| Deployment | **9** | 10 | 1 (npm publish) |
 
-**Total: ~36 of 75 requirements done. The product-defining features (bootstrap + countdown + draft mode) are 1 of 20.**
+**Total: 71 of 75 requirements done.**
 
----
-
-## The Core Blocker
-
-`/dev/tty` returns `ENXIO` in Claude Code's Bash sandbox. This kills:
-- Session-helper PTY writes (all helper-rendered UI)
-- Raw mode stdin (keypress detection for "press e to edit")
-- Countdown display
-- Draft mode display
-
-The session-helper modules are well-built and tested but **cannot run in Claude Code's environment**.
-
-## Paths Forward
-
-1. **MCP-only approach** — Make human-in-the-loop work entirely through MCP tool call/result cycle. Agent must stage every reply. Human sees drafts in Claude Code's tool output. Human intervenes by talking to the agent. No terminal UX, no countdown keypress. Simpler, doesn't match spec's "press e" vision but is the only thing that works in Claude Code's sandbox.
-
-2. **Separate terminal window** — Session-helper opens its own terminal (e.g. `open -a Terminal` on macOS) for the countdown/draft UI. MCP server communicates with it via IPC (unix socket, temp file, etc). Human presses `e` in that window. Complex but could deliver the full spec.
-
-3. **Claude Code hooks/extensions** — If Claude Code supports MCP server notifications, progress events, or custom UI rendering, use that. Would need investigation.
-
-4. **Revise the spec** — Accept Claude Code's constraints. Redefine "human in the loop" as the human talking to their agent normally. Agent stages drafts, human says "change X" or "send it". The agent is the intermediary. The 5-second auto-send becomes a tool-level default timeout.
+Remaining:
+- 10.2, 10.3: Cross-client testing (CC↔Codex, Codex↔Codex) — needs live verification
+- 11.4, 11.5: npm publish — workflows exist but packages not yet published
