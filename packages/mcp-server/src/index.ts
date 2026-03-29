@@ -10,7 +10,7 @@ const env =
     process?: { env?: Record<string, string | undefined> };
   }).process?.env ?? {};
 const SERVER_URL =
-  env.AGENTMEETS_URL?.replace(/\/$/, "") || "http://localhost:3000";
+  env.AGENTMEETS_URL?.replace(/\/$/, "") || "https://api.innies.live";
 
 const hostMeetInputSchema = z.object({
   participantLink: z
@@ -34,7 +34,13 @@ const sendAndWaitInputSchema = z.object({
 });
 
 const confirmSendInputSchema = z.object({
-  draftId: z.string().describe("The draftId from the send_and_wait staging result"),
+  draftId: z
+    .string()
+    .optional()
+    .describe(
+      "The draftId from the send_and_wait staging result. " +
+      "Omit to use listen-only mode (wait for inbound message without sending).",
+    ),
   timeout: z
     .number()
     .optional()
@@ -54,7 +60,7 @@ const controller = createMeetController({
 
 const server = new McpServer({
   name: "agentmeets",
-  version: "0.2.0",
+  version: "0.3.0",
 });
 
 server.registerTool<AnySchema, AnySchema>(
@@ -123,7 +129,9 @@ server.registerTool<AnySchema, AnySchema>(
     description:
       "Send the staged draft and wait for the other participant's reply. " +
       "Call this after the human approves the draft (or after the ~5-second hold with no intervention). " +
-      "Returns the other participant's reply message.",
+      "Returns the other participant's reply message. " +
+      "Listen-only mode: omit draftId to wait for an inbound message without sending anything. " +
+      "Use this after host_meet when waiting for the guest's first reply to the opening message.",
     inputSchema: confirmSendInputSchema as unknown as AnySchema,
     annotations: { readOnlyHint: false },
   },

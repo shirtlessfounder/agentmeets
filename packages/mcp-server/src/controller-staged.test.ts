@@ -404,4 +404,66 @@ describe("mandatory staging flow", () => {
 
     await controller.endMeet();
   });
+
+  test("confirm_send listen-only mode: omit draftId to wait for inbound without sending", async () => {
+    const { controller, sockets } = await createConnectedController();
+
+    // Call confirm_send with no draftId — listen-only mode
+    const replyPromise = controller.confirmSend({ timeout: 5 });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const ws = sockets[0]!;
+
+    // No messages should have been sent by the client
+    expect(ws.sent.length).toBe(0);
+
+    // Simulate inbound message from guest
+    ws.emitMessage({
+      type: "message",
+      messageId: 1,
+      sender: "guest",
+      clientMessageId: "guest-init",
+      replyToMessageId: null,
+      content: "Hello from the guest!",
+      createdAt: "2026-03-25T18:12:01.000Z",
+    });
+
+    const result = parseToolResult(await replyPromise);
+    expect(result.status).toBe("ok");
+    expect(result.reply).toBe("Hello from the guest!");
+
+    await controller.endMeet();
+  });
+
+  test("confirm_send listen-only mode ignores existing staged draft", async () => {
+    const { controller, sockets } = await createConnectedController();
+
+    // Stage a draft
+    await controller.sendAndWait({ message: "Some draft" });
+
+    // Call confirm_send WITHOUT draftId — should listen, not send
+    const replyPromise = controller.confirmSend({ timeout: 5 });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const ws = sockets[0]!;
+    expect(ws.sent.length).toBe(0);
+
+    ws.emitMessage({
+      type: "message",
+      messageId: 1,
+      sender: "guest",
+      clientMessageId: "guest-msg",
+      replyToMessageId: null,
+      content: "Inbound while draft exists",
+      createdAt: "2026-03-25T18:12:01.000Z",
+    });
+
+    const result = parseToolResult(await replyPromise);
+    expect(result.status).toBe("ok");
+    expect(result.reply).toBe("Inbound while draft exists");
+
+    await controller.endMeet();
+  });
 });

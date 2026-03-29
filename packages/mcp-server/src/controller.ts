@@ -40,7 +40,7 @@ export interface MeetController {
   hostMeet(input: { participantLink: string }): Promise<ToolResult>;
   guestMeet(input: { participantLink: string }): Promise<ToolResult>;
   sendAndWait(input: { message: string; timeout?: number }): Promise<ToolResult>;
-  confirmSend(input: { draftId: string; timeout?: number }): Promise<ToolResult>;
+  confirmSend(input: { draftId?: string; timeout?: number }): Promise<ToolResult>;
   reviseDraft(input: { draftId: string; revisedMessage: string }): Promise<ToolResult>;
   endMeet(): Promise<ToolResult>;
   getMeetState(): MeetState | null;
@@ -170,22 +170,11 @@ export function createMeetController({
     });
   }
 
-  async function confirmSend(input: { draftId: string; timeout?: number }): Promise<ToolResult> {
+  async function confirmSend(input: { draftId?: string; timeout?: number }): Promise<ToolResult> {
     const activeMeet = meetState;
     if (!activeMeet) {
       return errorResult("No active meet session");
     }
-
-    if (!activeMeet.stagedDraft) {
-      return errorResult("No staged draft to send");
-    }
-
-    if (activeMeet.stagedDraft.id !== input.draftId) {
-      return errorResult("Draft ID mismatch — the draft may have been replaced");
-    }
-
-    const message = activeMeet.stagedDraft.message;
-    activeMeet.stagedDraft = null;
 
     const ws = activeMeet.ws;
     if (!ws || ws.readyState !== 1) {
@@ -194,7 +183,26 @@ export function createMeetController({
     }
 
     const timeout = input.timeout ?? 120;
-    const payload = createMessagePayload(activeMeet, message);
+
+    // Listen-only mode: no draftId means just wait for inbound message
+    const listenOnly = !input.draftId;
+
+    if (!listenOnly) {
+      if (!activeMeet.stagedDraft) {
+        return errorResult("No staged draft to send");
+      }
+
+      if (activeMeet.stagedDraft.id !== input.draftId) {
+        return errorResult("Draft ID mismatch — the draft may have been replaced");
+      }
+    }
+
+    // Extract and clear draft before sending (if not listen-only)
+    let message: string | null = null;
+    if (!listenOnly && activeMeet.stagedDraft) {
+      message = activeMeet.stagedDraft.message;
+      activeMeet.stagedDraft = null;
+    }
 
     const result = await new Promise<PendingReplyResult>((resolve) => {
       const finish = (r: PendingReplyResult) => {
@@ -210,10 +218,13 @@ export function createMeetController({
         timeout * 1000,
       );
 
-      try {
-        ws.send(JSON.stringify(payload));
-      } catch {
-        finish({ content: null, reason: "disconnected" });
+      if (message !== null) {
+        const payload = createMessagePayload(activeMeet, message);
+        try {
+          ws.send(JSON.stringify(payload));
+        } catch {
+          finish({ content: null, reason: "disconnected" });
+        }
       }
     });
 

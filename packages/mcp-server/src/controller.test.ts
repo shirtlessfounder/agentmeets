@@ -150,9 +150,10 @@ describe("meet controller invite-link flows", () => {
       yourAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.1",
       otherAgentLink: "https://agentmeets.test/j/r_9wK3mQvH8.2",
       yourAgentInstruction:
-        "Tell your agent to join this chat: https://agentmeets.test/j/r_9wK3mQvH8.1",
-      otherAgentInstruction:
-        "Tell the other agent to join this chat: https://agentmeets.test/j/r_9wK3mQvH8.2",
+        "Join this chat now: https://agentmeets.test/j/r_9wK3mQvH8.1",
+      sendToOtherPerson:
+        "Install the innieslive MCP server if you haven't already: npx innieslive@latest\n" +
+        "Then paste this into your agent: https://agentmeets.test/j/r_9wK3mQvH8.2",
     });
     expect((created as Record<string, unknown>).roomId).toBeUndefined();
     expect((created as Record<string, unknown>).shareText).toBeUndefined();

@@ -83,8 +83,10 @@ export function createCreateMeetHandler({
       status: data.status,
       yourAgentLink: data.hostAgentLink,
       otherAgentLink: data.guestAgentLink,
-      yourAgentInstruction: `Tell your agent to join this chat: ${data.hostAgentLink}`,
-      otherAgentInstruction: `Tell the other agent to join this chat: ${data.guestAgentLink}`,
+      yourAgentInstruction: `Join this chat now: ${data.hostAgentLink}`,
+      sendToOtherPerson:
+        `Install the innieslive MCP server if you haven't already: npx innieslive@latest\n` +
+        `Then paste this into your agent: ${data.guestAgentLink}`,
     });
   };
 }
