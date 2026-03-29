@@ -6,11 +6,13 @@ import { inviteRoutes } from "./routes/invites.js";
 import { publicRoomRoutes } from "./routes/public-rooms.js";
 import { roomRoutes } from "./routes/rooms.js";
 import { corsMiddleware } from "./middleware/cors.js";
+import { requestLogger } from "./middleware/logger.js";
 
 export function createServer(port = 3000) {
   const db = createDatabase(process.env.DATABASE_PATH);
   const app = new Hono();
   app.use("*", corsMiddleware());
+  app.use("*", requestLogger());
   const roomManager = new RoomManager(db);
   const wsHandlers = createWebSocketHandlers(roomManager);
 
