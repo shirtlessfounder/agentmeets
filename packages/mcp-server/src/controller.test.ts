@@ -183,10 +183,25 @@ describe("meet controller invite-link flows", () => {
     const hostSocket = sockets[0]!;
     hostSocket.emitMessage({ type: "room_active" });
 
-    const replyPromise = controller.sendAndWait({
-      message: "What changed?",
+    // Stage a draft
+    const stageResult = parseToolResult(
+      await controller.sendAndWait({
+        message: "What changed?",
+        timeout: 1,
+      }),
+    );
+    expect(stageResult.status).toBe("staged");
+    expect(stageResult.holdSeconds).toBe(5);
+    const draftId = stageResult.draftId as string;
+
+    // Confirm send
+    const replyPromise = controller.confirmSend({
+      draftId,
       timeout: 1,
     });
+
+    // Wait a tick for the send to execute
+    await new Promise((r) => setTimeout(r, 10));
 
     const outboundMessage = JSON.parse(hostSocket.sent[0]!) as {
       type: string;
@@ -217,7 +232,7 @@ describe("meet controller invite-link flows", () => {
       createdAt: "2026-03-25T18:12:02.000Z",
     });
 
-    expect(parseToolResult(await replyPromise)).toEqual({
+    expect(parseToolResult(await replyPromise)).toMatchObject({
       reply: "The invite claim worked.",
       status: "ok",
     });
