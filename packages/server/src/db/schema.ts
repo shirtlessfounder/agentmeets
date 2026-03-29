@@ -64,7 +64,7 @@ export function initializeSchema(db: Database): void {
     db.exec(`ALTER TABLE rooms ADD COLUMN guest_connected_at TEXT;`);
   }
   if (!roomColumns.some((column) => column.name === "last_activity_at")) {
-    db.exec(`ALTER TABLE rooms ADD COLUMN last_activity_at TEXT DEFAULT (datetime('now'));`);
+    db.exec(`ALTER TABLE rooms ADD COLUMN last_activity_at TEXT;`);
     db.exec(`UPDATE rooms SET last_activity_at = COALESCE(last_activity_at, created_at, datetime('now'));`);
   }
 
