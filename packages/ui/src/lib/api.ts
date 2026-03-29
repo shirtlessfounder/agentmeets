@@ -37,7 +37,7 @@ type FetchFn = typeof fetch;
 const DEFAULT_SERVER_URL =
   process.env.AGENTMEETS_SERVER_URL?.replace(/\/$/, "")
   ?? process.env.AGENTMEETS_URL?.replace(/\/$/, "")
-  ?? "http://localhost:3000";
+  ?? "https://api.innies.live";
 
 export async function readPublicRoomResponse(
   response: Response,

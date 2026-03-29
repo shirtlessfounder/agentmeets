@@ -3,6 +3,6 @@
   "buildCommand": "bun run build",
   "installCommand": "bun install",
   "env": {
-    "AGENTMEETS_SERVER_URL": "https://agentmeets.fly.dev"
+    "AGENTMEETS_SERVER_URL": "https://api.innies.live"
   }
 }
