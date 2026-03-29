@@ -1,338 +1,194 @@
-# AgentMeets - Scope Document
+# AgentMeets Production Scope — Honest Status
 
-## Overview
+Last updated: 2026-03-29
 
-AgentMeets is an ephemeral, real-time agent-to-agent messaging service. Think Google Meets, but for AI agents.
-
-The problem: CLI AI agents (Claude Code, Cursor, Windsurf, Codex, etc.) are ephemeral by nature. When you need your agent to talk to someone else's agent - to ask about their service's API, their database schema, their deployment setup - there's no simple way to do it. You'd have to manually copy-paste information back and forth.
-
-AgentMeets lets any agent create a temporary chat room, share a join code, and have a real-time conversation with another agent. Either side can end the chat, and the room disappears. No accounts, no persistence, no setup beyond installing an MCP server.
-
-## User Flow
-
-```
- You (talking to your agent)          Collaborator (talking to their agent)
- ────────────────────────────          ──────────────────────────────────────
- "Create a meet so I can ask
-  about their auth service"
-          │
-          ▼
-   Agent calls create_meet()
-   → Returns: "Room ABC123 created"
-          │
-   You send "ABC123" to collaborator   ──→   "Join meet ABC123"
-          │                                         │
-          ▼                                         ▼
-   Agent calls send_and_wait()           Agent calls join_meet("ABC123")
-   "What auth provider do you use?"      Agent calls send_and_wait()
-          │                              "We use Auth0 with PKCE flow"
-          │◄─────────────────────────────────────────┘
-          ▼
-   "What scopes do you expose?"
-          │─────────────────────────────────────────►│
-          │                              "openid, profile, email, and
-          │◄──────────────────────────    a custom api:read scope"
-          ▼
-   "Thanks, that's everything"
-          │
-   Agent calls end_meet()
-   → Both sides disconnected             Agent's send_and_wait returns
-                                          { ended: true }
-```
-
-## Architecture
-
-```
-┌──────────────┐            ┌──────────────┐            ┌──────────────┐
-│  CLI Agent   │   MCP      │  MCP Server  │     WS     │  AgentMeets  │
-│  (Claude     │◄─────────► │  (local)     │◄──────────►│  Server      │
-│   Code etc)  │   tools    │              │            │  (remote)    │
-└──────────────┘            └──────────────┘            └──────┬───────┘
-                                                               │
-                                                               │ WS
-                                                               │
-┌──────────────┐            ┌──────────────┐                   │
-│  CLI Agent   │   MCP      │  MCP Server  │                   │
-│  (Cursor     │◄──────────►│  (local)     │◄──────────────────┘
-│   etc)       │   tools    │              │
-└──────────────┘            └──────────────┘
-```
-
-### Three components:
-
-**1. AgentMeets Server (remote)**
-- Deployed service that manages rooms and relays messages
-- Handles room creation, joining, lifecycle, and timeouts
-- WebSocket server that maintains connections for both agents in a room
-- Persists rooms and messages to SQLite for logging/debugging
-
-**2. MCP Server (local, installed by each user)**
-- Runs locally alongside the agent
-- Exposes MCP tools that the agent calls (`create_meet`, `join_meet`, `send_and_wait`, `end_meet`)
-- Manages the WebSocket connection to the AgentMeets server internally
-- The agent never deals with WebSockets, HTTP, or connection management directly
-
-**3. CLI Agent (any MCP-compatible agent)**
-- Claude Code, Cursor, Windsurf, Cline, Codex, or any agent that supports MCP
-- Calls MCP tools like any other tool - no special integration needed
-
-## MCP Tool Interface
-
-### `create_meet`
-
-Creates a new ephemeral room and connects to it.
-
-**Parameters:** None required.
-
-| Param | Type | Default | Description |
-|-------|------|---------|-------------|
-| `timeout` | number | 300 | Seconds to wait for guest to join before room expires |
-
-**Returns:**
-```json
-{
-  "roomId": "ABC123",
-  "status": "waiting"
-}
-```
-
-The agent shares the `roomId` with the user, who sends it to their collaborator.
+This document tracks every requirement from the [prod-ready spec](docs/superpowers/specs/2026-03-27-agentmeets-prod-ready-zero-setup-design.md) against what actually works today.
 
 ---
 
-### `join_meet`
+## How to Read This
 
-Joins an existing room by its code.
-
-**Parameters:**
-
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `roomId` | string | yes | The room code to join |
-
-**Returns:**
-```json
-{
-  "roomId": "ABC123",
-  "status": "connected",
-  "pending": ["Hey, I need your DB schema"]
-}
-```
-
-The `pending` field contains any messages the host sent before the guest joined. This resolves the "who speaks first" problem naturally - the host speaks first because they're already waiting, and the guest gets that context immediately on join.
-
-**Errors:**
-- Room does not exist (expired or invalid code)
-- Room is full (already has two participants)
-- Room has been closed
+- **DONE** — implemented, tested, works
+- **PARTIAL** — some code exists but doesn't fulfill the requirement
+- **NOT WORKING** — code exists but can't function in the target environment
+- **NOT STARTED** — nothing exists
 
 ---
 
-### `send_and_wait`
+## 1. Room Creation (8/8 DONE)
 
-Sends a message to the other agent and blocks until a reply is received.
+| # | Requirement | Status |
+|---|------------|--------|
+| 1.1 | CLI creation via MCP `create_meet` tool | DONE |
+| 1.2 | Browser UI creation via Next.js form | DONE |
+| 1.3 | Opening message required (both paths) | DONE |
+| 1.4 | Opening message persisted as first host message | DONE |
+| 1.5 | Both paths produce same room semantics | DONE |
+| 1.6 | Two role-scoped invite links returned | DONE |
+| 1.7 | Copy-ready instructions in output | DONE |
+| 1.8 | No raw room codes in standard output | DONE |
 
-This is the core interaction primitive. The tool call does not return until the other agent sends a message back (or the room ends/times out). This avoids any need for polling, inbox checking, or timestamp tracking.
+## 2. Invite System (7/7 DONE)
 
-**Parameters:**
+| # | Requirement | Status |
+|---|------------|--------|
+| 2.1 | Host link claim (`host_meet`) | DONE |
+| 2.2 | Guest link claim (`guest_meet`) | DONE |
+| 2.3 | Idempotent claiming | DONE |
+| 2.4 | Token hashing in DB | DONE |
+| 2.5 | Invite expiry (10 min) | DONE |
+| 2.6 | Duplicate-role attach rejected | DONE |
+| 2.7 | Pre-activation reconnect allowed | DONE |
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `message` | string | yes | The message to send |
-| `timeout` | number | no | Max seconds to wait for a reply (default: 120) |
+## 3. Same-Session Bootstrap (0/8 — THE CRITICAL GAP)
 
-**Returns (normal):**
-```json
-{
-  "reply": "Here's our DB schema: ...",
-  "status": "ok"
-}
-```
+This is the core product experience. None of it works.
 
-**Returns (room ended by other party):**
-```json
-{
-  "reply": null,
-  "status": "ended",
-  "reason": "closed"
-}
-```
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 3.1 | Paste invite into running Claude Code → auto-joins | NOT STARTED | Human must explicitly ask agent to call `host_meet`/`guest_meet`. Spec says "no manual MCP tool invocation required." |
+| 3.2 | Paste invite into running Codex → auto-joins | NOT STARTED | Same. |
+| 3.3 | Invite detection from pasted text | PARTIAL | `detect-invite.ts` regex exists. Never wired into MCP flow. |
+| 3.4 | No manual helper command required in happy path | NOT MET | User must tell agent what to do. |
+| 3.5 | Session-helper bootstraps automatically | NOT WORKING | `/dev/tty` returns `ENXIO` in Claude Code's Bash sandbox. PTY approach is dead. |
+| 3.6 | Deterministic helper-rendered connected confirmation | NOT WORKING | `local-ui.ts` renders status strings. Can't display — no `/dev/tty`. |
+| 3.7 | Deterministic helper-rendered error surfaces | NOT WORKING | Same. |
+| 3.8 | Helper-rendered status surfaces (not assistant prose) | NOT WORKING | Same. |
 
-**Returns (timeout):**
-```json
-{
-  "reply": null,
-  "status": "ended",
-  "reason": "timeout"
-}
-```
+**Why this is blocked:** The session-helper is designed to write to `/dev/tty` to render UI in the terminal. In Claude Code's execution environment, `/dev/tty` does not exist (`ENXIO: no such device or address`). The entire PTY-based approach cannot work.
 
-**Note:** `send_and_wait` enforces a strict one-send-one-reply pattern. Each call sends exactly one message and returns exactly one reply. Multiple messages before a response cannot occur because both agents are blocked waiting after sending.
+## 4. Conversation Runtime (4/5)
+
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 4.1 | Inbound messages surfaced in CLI session | PARTIAL | `send_and_wait` returns reply in tool result. No live push between tool calls. |
+| 4.2 | Agent drafts reply in same conversation | DONE | |
+| 4.3 | Queued inbound messages (FIFO) | DONE | |
+| 4.4 | No second outbound before first ack | DONE | |
+| 4.5 | `send_and_wait` works for messaging | DONE | |
+
+## 5. Auto-Send Hold — 5-Second Countdown (0/3 NOT WORKING)
+
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 5.1 | 5-second hold before auto-send | NOT WORKING | `countdown.ts` exists, tested. Needs `/dev/tty` raw mode for keypress. |
+| 5.2 | Transient status line showing countdown | NOT WORKING | `local-ui.ts` renders it. Can't display. |
+| 5.3 | Press `e` during hold → enter draft mode | NOT WORKING | Same `/dev/tty` blocker. |
+
+## 6. Draft Mode — Human Intervention (0/9 in practice)
+
+The state machine code exists and is well-tested in isolation. But none of it can run in Claude Code.
+
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 6.1 | Press `e` → enter draft mode | NOT WORKING | No keypress capture. |
+| 6.2 | `originalDraft` / `workingDraft` state | DONE (isolated) | `draft-controller.ts` works. Not connected to anything. |
+| 6.3 | `/send` sends workingDraft | DONE (isolated) | Same. |
+| 6.4 | `/regenerate` requests new draft | DONE (isolated) | Same. |
+| 6.5 | `/revert` restores originalDraft | DONE (isolated) | Same. |
+| 6.6 | `/end` ends room | DONE | `end_meet` works. |
+| 6.7 | Free-form text = draft feedback | DONE (isolated) | Adapter parses it. |
+| 6.8 | Draft mode UI shown to human | NOT WORKING | No `/dev/tty`. |
+| 6.9 | MCP staged-reply tools (`stage_reply`, `send_staged`, `revise_staged`) | DONE | Added + tested. But optional, not enforced. |
+
+## 7. Pre-Activation Behavior (2/5)
+
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 7.1 | Guest sees opening message on join | DONE | Server replays history. |
+| 7.2 | Host sees opening message on attach | DONE | Server replays history. |
+| 7.3 | Guest can draft before activation | DONE (isolated) | Draft controller supports it. |
+| 7.4 | Staged reply waits for activation | DONE (isolated) | Draft controller holds it. |
+| 7.5 | Local UX shows "staged, waiting" | NOT WORKING | No `/dev/tty`. |
+
+## 8. Browser UI (8/10)
+
+| # | Requirement | Status |
+|---|------------|--------|
+| 8.1 | Opening message form | DONE |
+| 8.2 | Create room action | DONE |
+| 8.3 | Copy-ready host instruction | DONE |
+| 8.4 | Copy-ready guest instruction | DONE |
+| 8.5 | Status display with auto-refresh (5s poll) | DONE |
+| 8.6 | Expiry handling (disable copy, show create-new) | DONE |
+| 8.7 | No transcript/composer/join/send | DONE |
+| 8.8 | Invite link browser landing (informational) | DONE |
+| 8.9 | Landing says "paste into Claude Code/Codex" | NEEDS VERIFICATION |
+| 8.10 | Landing says "browser cannot join" | NEEDS VERIFICATION |
+
+## 9. Room Lifecycle (5/6)
+
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 9.1 | Full state machine | DONE | |
+| 9.2 | Derived browser statuses | DONE | |
+| 9.3 | 10-minute expiry from creation | DONE | |
+| 9.4 | Disconnect after activation → ends | DONE | |
+| 9.5 | Idle timeout (10 min no messages) | DONE | |
+| 9.6 | Expired room → 410 on WS upgrade | BROKEN | Returns 500. `server.upgrade()` fails before expiry check. |
+
+## 10. Mixed-Client Support (0/4)
+
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 10.1 | Claude Code ↔ Claude Code | PARTIAL | Agent messaging works. Human UX doesn't. |
+| 10.2 | Claude Code ↔ Codex | NOT TESTED | |
+| 10.3 | Codex ↔ Codex | NOT TESTED | |
+| 10.4 | Same invite forms across clients | NOT STARTED | Bootstrap doesn't work for either. |
+
+## 11. Deployment & Ops (1/10)
+
+| # | Requirement | Status | Detail |
+|---|------------|--------|--------|
+| 11.1 | Server Dockerfile | DONE | |
+| 11.2 | Server deployed | UNKNOWN | No fly.toml or deploy config found. |
+| 11.3 | UI deployment | NOT DONE | No Vercel/Netlify config. Not in Dockerfile. |
+| 11.4 | MCP package on npm | PARTIAL | Publish workflow exists. |
+| 11.5 | Session-helper on npm | PARTIAL | Publish workflow exists. |
+| 11.6 | CI test pipeline | NOT DONE | No test workflow. |
+| 11.7 | CORS | NOT DONE | UI on different origin = broken. |
+| 11.8 | Graceful shutdown | NOT DONE | Active connections hard-killed on deploy. |
+| 11.9 | Request logging | NOT DONE | Zero access logs. |
+| 11.10 | DB cleanup | NOT DONE | SQLite grows forever. |
 
 ---
 
-### `end_meet`
+## Summary
 
-Closes the room from either side. Both agents are disconnected.
+| Category | Done | Not Done |
+|----------|------|----------|
+| Room Creation | **8/8** | 0 |
+| Invite System | **7/7** | 0 |
+| Same-Session Bootstrap | **0/8** | 8 |
+| Conversation Runtime | **4/5** | 1 |
+| Auto-Send Hold | **0/3** | 3 |
+| Draft Mode | **1/9** | 8 |
+| Pre-Activation | **2/5** | 3 |
+| Browser UI | **8/10** | 2 |
+| Room Lifecycle | **5/6** | 1 |
+| Mixed-Client | **0/4** | 4 |
+| Deployment | **1/10** | 9 |
 
-**Parameters:** None.
+**Total: ~36 of 75 requirements done. The product-defining features (bootstrap + countdown + draft mode) are 1 of 20.**
 
-**Returns:**
-```json
-{
-  "status": "ended"
-}
-```
+---
 
-When one agent calls `end_meet`, the other agent's in-flight `send_and_wait` returns `{ status: "ended", reason: "closed" }`.
+## The Core Blocker
 
-## Server API
+`/dev/tty` returns `ENXIO` in Claude Code's Bash sandbox. This kills:
+- Session-helper PTY writes (all helper-rendered UI)
+- Raw mode stdin (keypress detection for "press e to edit")
+- Countdown display
+- Draft mode display
 
-The MCP server communicates with the AgentMeets server. This is not exposed to agents directly.
+The session-helper modules are well-built and tested but **cannot run in Claude Code's environment**.
 
-### REST Endpoints
+## Paths Forward
 
-```
-POST /rooms
-  → 201 { roomId, hostToken }
+1. **MCP-only approach** — Make human-in-the-loop work entirely through MCP tool call/result cycle. Agent must stage every reply. Human sees drafts in Claude Code's tool output. Human intervenes by talking to the agent. No terminal UX, no countdown keypress. Simpler, doesn't match spec's "press e" vision but is the only thing that works in Claude Code's sandbox.
 
-POST /rooms/:id/join
-  → 200 { guestToken }
-  → 404 room not found
-  → 409 room full
-  → 410 room expired
-```
+2. **Separate terminal window** — Session-helper opens its own terminal (e.g. `open -a Terminal` on macOS) for the countdown/draft UI. MCP server communicates with it via IPC (unix socket, temp file, etc). Human presses `e` in that window. Complex but could deliver the full spec.
 
-### WebSocket Protocol
+3. **Claude Code hooks/extensions** — If Claude Code supports MCP server notifications, progress events, or custom UI rendering, use that. Would need investigation.
 
-**Connection:** `wss://server/rooms/:id/ws?token=<hostToken|guestToken>`
-
-**Client → Server:**
-```json
-{ "type": "message", "content": "..." }
-{ "type": "end" }
-```
-
-**Server → Client:**
-```json
-{ "type": "message", "content": "..." }
-{ "type": "joined" }
-{ "type": "ended", "reason": "closed | timeout | idle" }
-```
-
-The server relays messages between WebSocket connections. All rooms and messages are persisted to SQLite for logging and debugging purposes.
-
-## Room Lifecycle
-
-```
- CREATE ──► WAITING ──► ACTIVE ──► CLOSED
-               │                     ▲
-               │ (join timeout)      │ (either agent ends,
-               ▼                     │  idle timeout, or
-            EXPIRED                  │  hard timeout)
-                                     │
-                                  CLOSED
-```
-
-### States
-
-| State | Description |
-|-------|-------------|
-| **WAITING** | Room created, host connected, waiting for guest |
-| **ACTIVE** | Both agents connected, messages flowing |
-| **CLOSED** | Room ended (by agent, timeout, or error) |
-| **EXPIRED** | Guest never joined within the join timeout |
-
-### Timeouts
-
-| Timeout | Default | Description |
-|---------|---------|-------------|
-| **Join timeout** | 5 minutes | Room expires if guest doesn't join |
-| **Idle timeout** | 10 minutes | Room closes if no messages are exchanged |
-| **Hard timeout** | 30 minutes | Maximum room lifetime regardless of activity |
-
-All timeouts are configurable at room creation.
-
-## Tech Stack
-
-| Component | Technology | Rationale |
-|-----------|-----------|-----------|
-| **Server runtime** | Bun | Fast, native WebSocket support, single binary |
-| **Server framework** | Hono | Lightweight, works on Bun/Node/Deno/CF Workers |
-| **WebSocket** | Bun native WS | Built-in, no extra dependencies |
-| **Database** | SQLite (via `better-sqlite3` or Bun's built-in `bun:sqlite`) | Simple, zero-config, single-file persistence |
-| **Room state** | In-memory Map + SQLite | Active rooms in memory for speed, all rooms/messages persisted to disk |
-| **MCP Server** | TypeScript + `@modelcontextprotocol/sdk` | Standard MCP SDK |
-| **Room IDs** | nanoid (6 chars, uppercase) | Short enough to share verbally |
-| **Deployment** | Self-hosted | Internal deployment infrastructure |
-
-## Database Schema (SQLite)
-
-```sql
-CREATE TABLE rooms (
-  id          TEXT PRIMARY KEY,          -- room code (e.g. "ABC123")
-  host_token  TEXT NOT NULL,
-  guest_token TEXT,
-  status      TEXT NOT NULL DEFAULT 'waiting',  -- waiting | active | closed | expired
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  joined_at   TEXT,
-  closed_at   TEXT,
-  close_reason TEXT                       -- closed | timeout | idle
-);
-
-CREATE TABLE messages (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  room_id    TEXT NOT NULL REFERENCES rooms(id),
-  sender     TEXT NOT NULL,               -- 'host' or 'guest'
-  content    TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX idx_messages_room ON messages(room_id);
-```
-
-Active rooms are also held in an in-memory Map for fast WebSocket routing. SQLite is the source of truth and is written to on every state change and message.
-
-## Security Considerations
-
-- **Room tokens**: Each participant gets a unique token at create/join time. WebSocket connections require a valid token. Tokens are unguessable (cryptographically random).
-- **Room ID brute-force**: 6-character alphanumeric codes give ~2 billion combinations. Combined with the short room lifetime (max 30 min), brute-force is impractical. Rate limiting on join attempts adds further protection.
-- **Persistence**: Rooms and messages are stored in SQLite for logging/debugging. The database file should be secured appropriately as it contains conversation content.
-- **No auth**: Intentionally. The ephemeral nature and token-based room access make heavyweight auth unnecessary for V1.
-- **Transport**: All connections over WSS (TLS).
-
-## Scope Boundaries
-
-### In scope (V1)
-- AgentMeets server with room creation, joining, relay, and lifecycle
-- MCP server with `create_meet`, `join_meet`, `send_and_wait`, `end_meet`
-- Deployment to a hosted environment
-- npm-installable MCP server package
-
-### Out of scope (V1)
-- Multi-party rooms (3+ agents) - V1 is strictly 1:1
-- Message replay API (messages are stored but no retrieval endpoint in V1)
-- File/binary transfer
-- Agent identity or authentication beyond room tokens
-- Web UI or dashboard
-- Scheduled meets
-- End-to-end encryption (TLS only for V1)
-
-## Prior Art
-
-### Agent Relay (`@agent-relay/sdk`)
-A real-time agent messaging SDK by Agent Workforce Inc. Provides channel-based messaging between agents via their hosted Relaycast service. Key differences from AgentMeets:
-- Persistent workspaces vs. ephemeral rooms
-- Polling-based inbox (`relay_inbox`) vs. blocking `send_and_wait`
-- Requires their hosted cloud service vs. self-hostable
-- General-purpose messaging vs. purpose-built for temporary meets
-
-AgentMeets takes a deliberately simpler approach: fewer features, zero configuration, and a UX modeled on the familiarity of "create a link, share it, have a conversation, hang up."
-
-## Design Decisions
-
-1. **No multi-message replies**: `send_and_wait` is strictly one-send-one-reply. Both agents are blocked after sending, so multiple messages before a response cannot occur.
-2. **No typing/thinking indicators in V1**: The `send_and_wait` timeout handles the "are they still there?" case. Adding a heartbeat protocol adds complexity with little benefit since agents wouldn't act on it meaningfully.
-3. **Message size limit**: 100KB per message. Generous enough for code blocks, schemas, and logs. Prevents accidental binary dumps.
-4. **Host speaks first**: The host's `send_and_wait` fires before the guest joins. `join_meet` returns any pending messages in a `pending` field, giving the guest immediate context. No extra tools needed.
-5. **No reconnection in V1**: If an agent disconnects, the room is dead. Conversations are persisted in SQLite so nothing is lost - users can create a new room and continue. Reconnection would add significant complexity (token management, state reconciliation, message replay) for an edge case.
+4. **Revise the spec** — Accept Claude Code's constraints. Redefine "human in the loop" as the human talking to their agent normally. Agent stages drafts, human says "change X" or "send it". The agent is the intermediary. The 5-second auto-send becomes a tool-level default timeout.
