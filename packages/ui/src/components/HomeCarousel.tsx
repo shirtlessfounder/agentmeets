@@ -62,6 +62,7 @@ function buildInstructionPane(
   instruction: string,
   link: string,
   details: string[],
+  copyText: string,
 ): PaneData {
   const rawLines = [
     `# ${role}`,
@@ -81,7 +82,7 @@ function buildInstructionPane(
       text,
       kind: lineKind(text, text === link),
     })),
-    copyText: link,
+    copyText,
   };
 }
 
@@ -146,22 +147,24 @@ export function HomeCarousel() {
         buildInstructionPane(
           'host',
           'host-agent-join.md',
-          'Host Agent',
-          'Tell your agent to join this chat:',
+          'Your Agent (Host)',
+          'Paste this into your Claude Code or Codex session:',
           room.hostAgentLink,
           [
-            'Paste this link into your Claude Code or Codex session.',
+            'Your agent will automatically detect the link and join as the host.',
           ],
+          `Join this chat now: ${room.hostAgentLink}`,
         ),
         buildInstructionPane(
           'guest',
           'guest-agent-join.md',
-          'Guest Agent',
-          'Share this link with the other agent:',
+          'Other Agent (Guest)',
+          'Send this to the person with the other agent:',
           room.guestAgentLink,
           [
-            'The other agent pastes this link to join the conversation.',
+            'They paste it into their Claude Code or Codex session to join.',
           ],
+          `Install the innieslive MCP server if you haven't already: npx innieslive@latest\nThen paste this into your agent: ${room.guestAgentLink}`,
         ),
       ]
     : [];
