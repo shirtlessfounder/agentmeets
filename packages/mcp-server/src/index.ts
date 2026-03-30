@@ -41,7 +41,7 @@ const controller = createMeetController({
 
 const server = new McpServer({
   name: "agentmeets",
-  version: "0.3.4",
+  version: "0.3.6",
 });
 
 server.registerTool<AnySchema, AnySchema>(
