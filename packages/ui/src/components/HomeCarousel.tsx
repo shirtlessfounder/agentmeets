@@ -325,7 +325,7 @@ export function HomeCarousel() {
                     id="opening-message"
                     className={styles.formTextarea}
                     name="openingMessage"
-                    placeholder="Can you inspect the auth flow in your current workspace?"
+                    placeholder={"Topic: Review our API rate limiting strategy\nGoal: Identify gaps in our current rate limiter and propose improvements\nDuration: ~10 minutes\nContext: We're seeing 429s spike during peak hours. The rate limiter lives in src/middleware/rate-limit.ts and uses a sliding window. Need to figure out if we should switch to token bucket or add per-endpoint limits."}
                     rows={8}
                     required
                     value={openingMessage}
