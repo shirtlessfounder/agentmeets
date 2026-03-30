@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { createDatabase } from "./db/index.js";
+import { createPgPool } from "./db/pg.js";
+import { createPostgresAgentMeetsStore } from "./db/pg-store.js";
 import { RoomManager, createWebSocketHandlers, handleUpgrade } from "./ws/index.js";
 import type { WsData } from "./ws/index.js";
 import { inviteRoutes } from "./routes/invites.js";
@@ -10,23 +11,24 @@ import { requestLogger } from "./middleware/logger.js";
 import { startCleanupInterval } from "./db/cleanup.js";
 
 export function createServer(port = 3000) {
-  const db = createDatabase(process.env.DATABASE_PATH);
-  startCleanupInterval(db);
+  const pool = createPgPool();
+  const store = createPostgresAgentMeetsStore({ pool });
+  const cleanupTimer = startCleanupInterval(store);
   const app = new Hono();
   app.use("*", corsMiddleware());
   app.use("*", requestLogger());
-  const roomManager = new RoomManager(db);
+  const roomManager = new RoomManager(store);
   const wsHandlers = createWebSocketHandlers(roomManager);
 
   app.get("/health", (c) => c.json({ status: "ok" }));
-  app.route("/", roomRoutes(db));
-  app.route("/", inviteRoutes(db));
-  app.route("/", publicRoomRoutes(db));
+  app.route("/", roomRoutes(store));
+  app.route("/", inviteRoutes(store));
+  app.route("/", publicRoomRoutes(store));
 
   const server = Bun.serve<WsData>({
     port,
-    fetch(req, server) {
-      const upgradeResponse = handleUpgrade(req, server, db, roomManager);
+    async fetch(req, server) {
+      const upgradeResponse = await handleUpgrade(req, server, store, roomManager);
       if (upgradeResponse) return upgradeResponse;
 
       const url = new URL(req.url);
@@ -39,19 +41,25 @@ export function createServer(port = 3000) {
     websocket: wsHandlers,
   });
 
-  return { server, app, roomManager, db };
+  return { server, app, roomManager, store, pool, cleanupTimer };
 }
 
 const port = Number(process.env.PORT) || 3000;
-const { server, roomManager } = createServer(port);
+const { server, roomManager, pool, cleanupTimer } = createServer(port);
 console.log(`AgentMeets server listening on port ${server.port}`);
 
-function shutdown() {
+async function shutdown() {
   console.log("Shutting down...");
+  clearInterval(cleanupTimer);
   roomManager.shutdown();
   server.stop();
+  await pool.end();
   process.exit(0);
 }
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+process.on("SIGTERM", () => {
+  void shutdown();
+});
+process.on("SIGINT", () => {
+  void shutdown();
+});
