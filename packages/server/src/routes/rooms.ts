@@ -13,6 +13,8 @@ import { rateLimiter } from "../middleware/rate-limit.js";
 
 const ROOM_ID_PATTERN = /^[A-Z0-9]{6}$/;
 const MAX_COLLISION_RETRIES = 3;
+const PUBLIC_BASE_URL =
+  process.env.PUBLIC_URL?.replace(/\/$/, "") ?? "https://innies.live";
 const DEFAULT_INVITE_TTL_MS = 10 * 60 * 1000;
 const ROOM_STEM_PREFIX = "r_";
 
@@ -80,8 +82,8 @@ export function roomRoutes(db: Database): Hono {
           {
             roomId,
             roomStem,
-            hostAgentLink: new URL(`/j/${roomStem}.1`, c.req.url).toString(),
-            guestAgentLink: new URL(`/j/${roomStem}.2`, c.req.url).toString(),
+            hostAgentLink: `${PUBLIC_BASE_URL}/j/${roomStem}.1`,
+            guestAgentLink: `${PUBLIC_BASE_URL}/j/${roomStem}.2`,
             inviteExpiresAt,
             status: "waiting_for_both",
           },
