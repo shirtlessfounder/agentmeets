@@ -562,6 +562,7 @@ describe("browser room presentation", () => {
     expect(html.status).toBe(200);
     expect(html.headers.get("content-type")).toContain("text/html");
     const body = await html.text();
+    expect(body).toContain("innies.live / invite landing");
     expect(body).toContain("Paste this invite into an existing Claude Code or Codex session");
     expect(body).toContain("This browser cannot join the room");
     expect(body).not.toContain("Send message");

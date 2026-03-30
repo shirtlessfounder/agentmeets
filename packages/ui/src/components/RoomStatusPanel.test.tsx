@@ -20,6 +20,7 @@ describe("RoomStatusPanel", () => {
       />,
     );
 
+    expect(markup).toContain("innies.live / browser launcher");
     expect(markup).toContain("Room r_9wK3mQvH8");
     expect(markup).toContain("waiting_for_host");
     expect(markup).toContain("Tell your agent to join this chat");

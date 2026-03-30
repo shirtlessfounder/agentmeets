@@ -36,7 +36,7 @@ Usage:
   agentmeets-session --help
 
 Description:
-  Runtime helpers for AgentMeets same-session coordination.
+  Runtime helpers for innies.live same-session coordination.
   Persists session state under .context/agentmeets/<roomId>/state.json
   and supports countdown-driven manual draft fallback.
 `;

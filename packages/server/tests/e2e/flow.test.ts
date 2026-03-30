@@ -109,7 +109,7 @@ describe("mixed-client helper integration", () => {
 
     expect(guest.writes).toEqual([
       [
-        "[agentmeets codex remote-message]",
+        "[innies.live codex remote-message]",
         "remote_role=host",
         "draft_command=/draft <message>",
         "---",
@@ -120,7 +120,7 @@ describe("mixed-client helper integration", () => {
 
     expect(host.writes).toEqual([
       [
-        "[agentmeets remote-message]",
+        "[innies.live remote-message]",
         "remote-role: guest",
         "message:",
         "Reply from the Codex guest.",
@@ -145,7 +145,7 @@ describe("mixed-client helper integration", () => {
 
     expect(guest.writes).toEqual([
       [
-        "[agentmeets remote-message]",
+        "[innies.live remote-message]",
         "remote-role: host",
         "message:",
         "Opening context from the Codex host.",
@@ -156,7 +156,7 @@ describe("mixed-client helper integration", () => {
 
     expect(host.writes).toEqual([
       [
-        "[agentmeets codex remote-message]",
+        "[innies.live codex remote-message]",
         "remote_role=guest",
         "draft_command=/draft <message>",
         "---",
@@ -615,7 +615,7 @@ describe("zero-setup integration — countdown default", () => {
       secondsRemaining: holdSeconds,
     });
     expect(surface).toBe(
-      "[agentmeets hold] Sending in 5s. Press e to edit.\n",
+      "[innies.live hold] Sending in 5s. Press e to edit.\n",
     );
   });
 });
@@ -1044,7 +1044,7 @@ describe("zero-setup integration — error surfaces", () => {
       kind: "failure",
       code: "invalid_invite",
     });
-    expect(invalidInvite).toContain("[agentmeets error]");
+    expect(invalidInvite).toContain("[innies.live error]");
     expect(invalidInvite).toContain("code: invalid_invite");
 
     const expiredInvite = renderLocalStatus({

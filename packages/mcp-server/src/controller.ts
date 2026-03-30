@@ -482,17 +482,17 @@ function parseParticipantLink(
   try {
     parsed = new URL(participantLink);
   } catch {
-    return { error: "participantLink must be a valid AgentMeets invite link" };
+    return { error: "participantLink must be a valid innies.live invite link" };
   }
 
   const inviteMatch = parsed.pathname.match(/^\/j\/([A-Za-z0-9_.-]+)$/);
   if (!inviteMatch) {
-    return { error: "participantLink must be a valid AgentMeets invite link" };
+    return { error: "participantLink must be a valid innies.live invite link" };
   }
 
   const suffix = inviteMatch[1].match(/\.(1|2)$/)?.[1];
   if (!suffix) {
-    return { error: "participantLink must be a valid AgentMeets invite link" };
+    return { error: "participantLink must be a valid innies.live invite link" };
   }
 
   if (expectedRole === "host" && suffix !== "1") {
@@ -510,7 +510,7 @@ function parseParticipantLink(
 }
 
 function roleInviteError(role: Sender): string {
-  return `participantLink must be a ${role} AgentMeets invite link`;
+  return `participantLink must be a ${role} innies.live invite link`;
 }
 
 function errorResult(message: string): ToolResult {

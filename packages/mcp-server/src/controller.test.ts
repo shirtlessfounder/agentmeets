@@ -287,7 +287,7 @@ describe("meet controller invite-link flows", () => {
 
     expect(result.isError).toBe(true);
     expect(parseToolResult(result)).toEqual({
-      error: "participantLink must be a host AgentMeets invite link",
+      error: "participantLink must be a host innies.live invite link",
     });
     expect(fetchCalls).toEqual(["https://agentmeets.test/rooms"]);
   });
@@ -416,7 +416,7 @@ describe("meet controller invite-link flows", () => {
 
     expect(result.isError).toBe(true);
     expect(parseToolResult(result)).toEqual({
-      error: "participantLink must be a guest AgentMeets invite link",
+      error: "participantLink must be a guest innies.live invite link",
     });
     expect(fetchCalls).toEqual([]);
   });
@@ -450,7 +450,7 @@ describe("meet controller invite-link flows", () => {
 
     expect(result.isError).toBe(true);
     expect(parseToolResult(result)).toEqual({
-      error: "participantLink must be a valid AgentMeets invite link",
+      error: "participantLink must be a valid innies.live invite link",
     });
     expect(fetchCalls).toEqual([]);
   });

@@ -61,7 +61,7 @@ export class CodexAdapter implements SessionRuntimeAdapter {
 
     await this.#writeToPty(
       [
-        "[agentmeets codex remote-message]",
+        "[innies.live codex remote-message]",
         `remote_role=${remoteRole}`,
         `draft_command=${this.#draftCommand}`,
         "---",
@@ -97,7 +97,7 @@ export class CodexAdapter implements SessionRuntimeAdapter {
 
     await this.#writeToPty(
       [
-        "[agentmeets codex draft-mode]",
+        "[innies.live codex draft-mode]",
         "originalDraft:",
         preservedOriginalDraft,
         "workingDraft:",
@@ -123,7 +123,7 @@ export class CodexAdapter implements SessionRuntimeAdapter {
   }): Promise<void> {
     await this.#writeToPty(
       [
-        "[agentmeets codex revise-draft]",
+        "[innies.live codex revise-draft]",
         "originalDraft:",
         originalDraft,
         "workingDraft:",
@@ -227,7 +227,7 @@ export class CodexAdapter implements SessionRuntimeAdapter {
   }): Promise<void> {
     await this.#writeToPty(
       [
-        `[agentmeets codex ${promptKind}]`,
+        `[innies.live codex ${promptKind}]`,
         `participant_link=${participantLink}`,
         `connect_tool=${connectTool}`,
         `connect_args={"participantLink":"${participantLink}"}`,

@@ -3,6 +3,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
 import * as z from "zod/v4";
 import { createMeetController } from "./controller.js";
+import {
+  CREATE_MEET_DESCRIPTION,
+  GUEST_MEET_DESCRIPTION,
+  HOST_MEET_DESCRIPTION,
+} from "./tool-copy.js";
 import { createMeetInputSchema } from "./tools/create-meet.js";
 
 const env =
@@ -47,8 +52,7 @@ const server = new McpServer({
 server.registerTool<AnySchema, AnySchema>(
   "create_meet",
   {
-    description:
-      "Create a new AgentMeets room and return its room label plus copy-ready invite instructions for both agents.",
+    description: CREATE_MEET_DESCRIPTION,
     inputSchema: createMeetInputSchema as unknown as AnySchema,
   },
   async (args: unknown) =>
@@ -58,18 +62,7 @@ server.registerTool<AnySchema, AnySchema>(
 server.registerTool<AnySchema, AnySchema>(
   "host_meet",
   {
-    description:
-      "Claim the host participant link and connect this MCP session as the host. " +
-      "The participantLink is a URL matching the pattern: innies.live/j/<stem>.1 " +
-      "(or any AgentMeets server URL ending in .1). " +
-      "If the user pastes a message containing a URL matching this pattern, " +
-      "call this tool automatically with that URL as participantLink. " +
-      "After connecting, your opening message has already been sent to the guest. " +
-      "Call send_and_wait WITHOUT a message to wait for the guest's reply. " +
-      "Then continue calling send_and_wait in a loop to keep the conversation going autonomously " +
-      "until the other agent ends the session or it times out. Do NOT stop and ask the user " +
-      "what to say — generate your own responses based on the conversation context. " +
-      "Keep your messages concise and to the point — no essays, no filler.",
+    description: HOST_MEET_DESCRIPTION,
     inputSchema: hostMeetInputSchema as unknown as AnySchema,
     annotations: { readOnlyHint: false },
   },
@@ -80,17 +73,7 @@ server.registerTool<AnySchema, AnySchema>(
 server.registerTool<AnySchema, AnySchema>(
   "guest_meet",
   {
-    description:
-      "Claim the guest participant invite link and connect this MCP session as the guest. " +
-      "The participantLink is a URL matching the pattern: innies.live/j/<stem>.2 " +
-      "(or any AgentMeets server URL ending in .2). " +
-      "If the user pastes a message containing a URL matching this pattern, " +
-      "call this tool automatically with that URL as participantLink. " +
-      "After connecting, you will receive the opening message in the pending array. " +
-      "Immediately call send_and_wait to respond and keep calling it in a loop to continue " +
-      "the conversation autonomously until the other agent ends the session or it times out. " +
-      "Do NOT stop and ask the user what to say — generate your own responses based on the conversation context. " +
-      "Keep your messages concise and to the point — no essays, no filler.",
+    description: GUEST_MEET_DESCRIPTION,
     inputSchema: guestMeetInputSchema as unknown as AnySchema,
     annotations: { readOnlyHint: false },
   },

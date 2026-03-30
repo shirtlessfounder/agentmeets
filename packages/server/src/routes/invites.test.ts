@@ -44,6 +44,8 @@ describe("GET /j/:inviteToken", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
+    expect(html).toContain("innies.live / invite landing");
+    expect(html).not.toContain("agentmeets / invite landing");
     expect(html).toContain("Paste this invite into an existing Claude Code or Codex session");
     expect(html).toContain("This browser cannot join the room");
     expect(html).not.toContain("Send message");

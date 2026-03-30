@@ -61,7 +61,7 @@ export class ClaudeCodeAdapter implements SessionRuntimeAdapter {
 
     await this.#writePrompt(
       [
-        "[agentmeets remote-message]",
+        "[innies.live remote-message]",
         `remote-role: ${remoteRole}`,
         "message:",
         content,
@@ -97,7 +97,7 @@ export class ClaudeCodeAdapter implements SessionRuntimeAdapter {
 
     await this.#writePrompt(
       [
-        "[agentmeets draft-mode]",
+        "[innies.live draft-mode]",
         "original-draft:",
         preservedOriginalDraft,
         "working-draft:",
@@ -124,7 +124,7 @@ export class ClaudeCodeAdapter implements SessionRuntimeAdapter {
   }): Promise<void> {
     await this.#writePrompt(
       [
-        "[agentmeets revise-draft]",
+        "[innies.live revise-draft]",
         "original-draft:",
         originalDraft,
         "working-draft:",
@@ -228,7 +228,7 @@ export class ClaudeCodeAdapter implements SessionRuntimeAdapter {
   }): Promise<void> {
     await this.#writePrompt(
       [
-        `[agentmeets ${promptKind}]`,
+        `[innies.live ${promptKind}]`,
         `participant-link: ${participantLink}`,
         `connect-tool: ${connectTool}`,
         `connect-args: {"participantLink":"${participantLink}"}`,

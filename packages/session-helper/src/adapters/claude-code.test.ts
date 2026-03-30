@@ -23,7 +23,7 @@ describe("ClaudeCodeAdapter", () => {
 
     expect(writes).toEqual([
       [
-        "[agentmeets remote-message]",
+        "[innies.live remote-message]",
         "remote-role: guest",
         "message:",
         "Please summarize the outage and confirm the rollback.",
@@ -81,7 +81,7 @@ describe("ClaudeCodeAdapter", () => {
 
     expect(writes[0]).toBe(
       [
-        "[agentmeets draft-mode]",
+        "[innies.live draft-mode]",
         "original-draft:",
         "Initial summary for the remote agent.",
         "working-draft:",
@@ -118,7 +118,7 @@ describe("ClaudeCodeAdapter", () => {
 
     expect(writes[1]).toBe(
       [
-        "[agentmeets draft-mode]",
+        "[innies.live draft-mode]",
         "original-draft:",
         "Initial summary for the remote agent.",
         "working-draft:",
@@ -158,7 +158,7 @@ describe("ClaudeCodeAdapter", () => {
 
     expect(writes).toEqual([
       [
-        "[agentmeets host-ready]",
+        "[innies.live host-ready]",
         "participant-link: https://agentmeets.test/j/r_9wK3mQvH8.1",
         "connect-tool: host_meet",
         'connect-args: {"participantLink":"https://agentmeets.test/j/r_9wK3mQvH8.1"}',
@@ -190,7 +190,7 @@ describe("ClaudeCodeAdapter", () => {
 
     expect(writes).toEqual([
       [
-        "[agentmeets guest-ready]",
+        "[innies.live guest-ready]",
         "participant-link: https://agentmeets.test/j/r_9wK3mQvH8.2",
         "connect-tool: guest_meet",
         'connect-args: {"participantLink":"https://agentmeets.test/j/r_9wK3mQvH8.2"}',

@@ -23,7 +23,7 @@ describe("CodexAdapter", () => {
 
     expect(writes).toEqual([
       [
-        "[agentmeets codex remote-message]",
+        "[innies.live codex remote-message]",
         "remote_role=host",
         "draft_command=/draft <message>",
         "---",
@@ -55,7 +55,7 @@ describe("CodexAdapter", () => {
 
     expect(writes[0]).toBe(
       [
-        "[agentmeets codex draft-mode]",
+        "[innies.live codex draft-mode]",
         "originalDraft:",
         "Initial summary for Codex.",
         "workingDraft:",
@@ -88,7 +88,7 @@ describe("CodexAdapter", () => {
 
     expect(writes[1]).toBe(
       [
-        "[agentmeets codex draft-mode]",
+        "[innies.live codex draft-mode]",
         "originalDraft:",
         "Initial summary for Codex.",
         "workingDraft:",
@@ -124,7 +124,7 @@ describe("CodexAdapter", () => {
 
     expect(writes).toEqual([
       [
-        "[agentmeets codex host-ready]",
+        "[innies.live codex host-ready]",
         "participant_link=https://agentmeets.test/j/r_9wK3mQvH8.1",
         "connect_tool=host_meet",
         'connect_args={"participantLink":"https://agentmeets.test/j/r_9wK3mQvH8.1"}',
@@ -156,7 +156,7 @@ describe("CodexAdapter", () => {
 
     expect(writes).toEqual([
       [
-        "[agentmeets codex guest-ready]",
+        "[innies.live codex guest-ready]",
         "participant_link=https://agentmeets.test/j/r_9wK3mQvH8.2",
         "connect_tool=guest_meet",
         'connect_args={"participantLink":"https://agentmeets.test/j/r_9wK3mQvH8.2"}',

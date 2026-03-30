@@ -250,6 +250,12 @@ describe("session-helper CLI", () => {
     expect(harness.stdout.join("")).toContain(
       "agentmeets-session guest --participant-link <url>",
     );
+    expect(harness.stdout.join("")).toContain(
+      "Runtime helpers for innies.live same-session coordination.",
+    );
+    expect(harness.stdout.join("")).not.toContain(
+      "Runtime helpers for AgentMeets same-session coordination.",
+    );
   });
 
   test("bootstrap mode accepts pasted invite instructions and starts the resident runtime", async () => {

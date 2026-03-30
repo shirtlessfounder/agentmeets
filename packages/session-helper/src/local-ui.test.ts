@@ -15,7 +15,7 @@ describe("renderLocalStatus", () => {
         role: "guest",
         roomLabel: "Room r_9wK3mQvH8",
       }),
-    ).toContain("connected");
+    ).toContain("[innies.live status]");
 
     expect(
       module.renderLocalStatus({
@@ -24,7 +24,7 @@ describe("renderLocalStatus", () => {
         roomLabel: "Room r_9wK3mQvH8",
         waitingFor: "host",
       }),
-    ).toContain("waiting for host");
+    ).toContain("[innies.live status]");
   });
 
   test("renders deterministic staged, failure, and hold-countdown surfaces", async () => {
@@ -49,13 +49,13 @@ describe("renderLocalStatus", () => {
         code: "runtime_failure",
         detail: "WebSocket connection failed",
       }),
-    ).toContain("runtime_failure");
+    ).toContain("[innies.live error]");
 
     expect(
       module.renderLocalStatus({
         kind: "hold_countdown",
         secondsRemaining: 5,
       }),
-    ).toContain("Sending in 5s. Press e to edit.");
+    ).toContain("[innies.live hold] Sending in 5s. Press e to edit.");
   });
 });

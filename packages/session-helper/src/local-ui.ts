@@ -31,7 +31,7 @@ export function renderLocalStatus(input: LocalStatusSurface): string {
   switch (input.kind) {
     case "connected":
       return [
-        "[agentmeets status]",
+        "[innies.live status]",
         "status: connected",
         `room: ${input.roomLabel}`,
         `role: ${input.role}`,
@@ -39,7 +39,7 @@ export function renderLocalStatus(input: LocalStatusSurface): string {
       ].join("\n");
     case "waiting_for_other_side":
       return [
-        "[agentmeets status]",
+        "[innies.live status]",
         `status: waiting for ${input.waitingFor}`,
         `room: ${input.roomLabel}`,
         `role: ${input.role}`,
@@ -47,7 +47,7 @@ export function renderLocalStatus(input: LocalStatusSurface): string {
       ].join("\n");
     case "staged_pre_activation":
       return [
-        "[agentmeets status]",
+        "[innies.live status]",
         "status: staged pre-activation",
         `room: ${input.roomLabel}`,
         `role: ${input.role}`,
@@ -56,7 +56,7 @@ export function renderLocalStatus(input: LocalStatusSurface): string {
       ].join("\n");
     case "failure":
       return [
-        "[agentmeets error]",
+        "[innies.live error]",
         `code: ${input.code}`,
         input.detail ? `detail: ${input.detail}` : null,
         "",
@@ -64,7 +64,7 @@ export function renderLocalStatus(input: LocalStatusSurface): string {
         .filter((line): line is string => line !== null)
         .join("\n");
     case "hold_countdown":
-      return `[agentmeets hold] Sending in ${input.secondsRemaining}s. Press e to edit.\n`;
+      return `[innies.live hold] Sending in ${input.secondsRemaining}s. Press e to edit.\n`;
   }
 }
 

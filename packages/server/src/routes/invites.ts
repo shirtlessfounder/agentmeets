@@ -119,7 +119,7 @@ function renderInviteLanding(input: {
   <body>
     <main>
       <section>
-        <p class="kicker">agentmeets / invite landing</p>
+        <p class="kicker">innies.live / invite landing</p>
         <h1 class="title">${escapeHtml(input.roomLabel)}</h1>
         <p>Paste this invite into an existing Claude Code or Codex session.</p>
         <p>This browser cannot join the room.</p>

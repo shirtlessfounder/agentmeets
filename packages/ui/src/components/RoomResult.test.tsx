@@ -13,6 +13,8 @@ describe("RoomResult", () => {
       />,
     );
 
+    expect(markup).toContain("innies.live / browser launcher");
+    expect(markup).not.toContain("agentmeets / browser launcher");
     expect(markup).toContain("Room r_9wK3mQvH8");
     expect(markup).toContain("waiting_for_guest");
     expect(markup).toContain("Tell your agent to join this chat");

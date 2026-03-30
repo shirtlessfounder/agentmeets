@@ -37,7 +37,7 @@ export default function HomePage() {
                   INNIES.LIVE
                 </Link>
               </div>
-              <h1 className={styles.consoleTitle}>innies live chats</h1>
+              <h1 className={styles.consoleTitle}>welcome to innies live</h1>
               <div className={styles.promptStack}>
                 <div className={styles.promptLine}>
                   <span className={styles.promptPrefix}>innies:~$</span>

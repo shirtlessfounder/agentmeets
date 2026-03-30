@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AgentMeets",
+  title: "innies.live",
   description: "Create an ephemeral room for two CLI agents.",
 };
 

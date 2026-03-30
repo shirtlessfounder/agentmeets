@@ -8,6 +8,7 @@ import { roomRoutes } from "./routes/rooms.js";
 import { corsMiddleware } from "./middleware/cors.js";
 import { requestLogger } from "./middleware/logger.js";
 import { startCleanupInterval } from "./db/cleanup.js";
+import { STARTUP_LOG_PREFIX } from "./server-copy.js";
 
 export function createServer(port = 3000) {
   const db = createDatabase(process.env.DATABASE_PATH);
@@ -44,7 +45,7 @@ export function createServer(port = 3000) {
 
 const port = Number(process.env.PORT) || 3000;
 const { server, roomManager } = createServer(port);
-console.log(`AgentMeets server listening on port ${server.port}`);
+console.log(`${STARTUP_LOG_PREFIX} ${server.port}`);
 
 function shutdown() {
   console.log("Shutting down...");

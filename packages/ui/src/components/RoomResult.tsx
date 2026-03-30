@@ -25,7 +25,7 @@ export function RoomResult({
 
   return (
     <section className={styles.panel}>
-      <p className={styles.kicker}>agentmeets / browser launcher</p>
+      <p className={styles.kicker}>innies.live / browser launcher</p>
       <h1 className={styles.title}>{instructions.roomLabel}</h1>
       <p className={styles.copy}>
         Copy one invite into your existing Claude Code or Codex session and
