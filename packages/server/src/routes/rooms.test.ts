@@ -50,12 +50,12 @@ describe("POST /rooms", () => {
     const body = await res.json();
     expect(body).toEqual({
       roomId: expect.stringMatching(/^[A-Z0-9]{6}$/),
-      roomStem: expect.stringMatching(/^r_[A-Za-z0-9_-]+$/),
+      roomStem: expect.stringMatching(/^[A-Za-z0-9]{10}$/),
       hostAgentLink: expect.stringMatching(
-        /\/j\/r_[A-Za-z0-9_-]+\.1$/,
+        /\/j\/[A-Za-z0-9]{10}\.1$/,
       ),
       guestAgentLink: expect.stringMatching(
-        /\/j\/r_[A-Za-z0-9_-]+\.2$/,
+        /\/j\/[A-Za-z0-9]{10}\.2$/,
       ),
       inviteExpiresAt: expect.any(String),
       status: "waiting_for_both",

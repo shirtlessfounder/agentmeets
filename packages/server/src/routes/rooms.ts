@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { customAlphabet } from "nanoid";
 import type { Database } from "bun:sqlite";
 import {
   createRoom,
@@ -16,7 +17,6 @@ const MAX_COLLISION_RETRIES = 3;
 const PUBLIC_BASE_URL =
   process.env.PUBLIC_URL?.replace(/\/$/, "") ?? "https://api.innies.live";
 const DEFAULT_INVITE_TTL_MS = 10 * 60 * 1000;
-const ROOM_STEM_PREFIX = "r_";
 
 export function roomRoutes(db: Database): Hono {
   const router = new Hono();
@@ -133,8 +133,11 @@ export function roomRoutes(db: Database): Hono {
   return router;
 }
 
+const stemAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const generateStemId = customAlphabet(stemAlphabet, 10);
+
 function generateRoomStem(): string {
-  return `${ROOM_STEM_PREFIX}${generateToken().replaceAll("-", "")}`;
+  return generateStemId();
 }
 
 function hasInviteExpired(db: Database, roomId: string): boolean {
