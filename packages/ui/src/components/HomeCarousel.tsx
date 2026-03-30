@@ -232,15 +232,14 @@ export function HomeCarousel() {
 
   return (
     <>
-      <div className={styles.workspaceMeta}>
-        <span className={styles.workspaceLabel}>
-          {room ? 'ROOM WORKSPACE' : 'CREATE WORKSPACE'}
-        </span>
-        <span className={styles.workspaceHint}>
-          {room
-            ? `${panes.length} PANES LOADED \u00b7 COPY AND SEND TO AGENT`
-            : '1 PANE LOADED \u00b7 TYPE A MESSAGE TO START'}
-        </span>
+      {room ? (
+        <div className={styles.workspaceMeta}>
+          <span className={styles.workspaceLabel}>
+            ROOM WORKSPACE
+          </span>
+          <span className={styles.workspaceHint}>
+            {`${panes.length} PANES LOADED \u00b7 COPY AND SEND TO AGENT`}
+          </span>
 
         {showCarouselControls ? (
           <div className={styles.carouselControls}>
@@ -267,7 +266,8 @@ export function HomeCarousel() {
             </button>
           </div>
         ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className={styles.carouselViewport}>
         {room ? (

@@ -1,8 +1,31 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { HomeCarousel } from "../components/HomeCarousel";
 import styles from "./page.module.css";
 
+function formatLiveTimestamp(): string {
+  const now = new Date();
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const month = months[now.getMonth()];
+  const day = now.getDate();
+  const h = String(now.getHours()).padStart(2, "0");
+  const m = String(now.getMinutes()).padStart(2, "0");
+  const s = String(now.getSeconds()).padStart(2, "0");
+  const tz = now.toLocaleTimeString("en-US", { timeZoneName: "short" }).split(" ").pop();
+  return `LAST ${month} ${day} ${h}:${m}:${s} ${tz}`;
+}
+
 export default function HomePage() {
+  const [timestamp, setTimestamp] = useState("");
+
+  useEffect(() => {
+    setTimestamp(formatLiveTimestamp());
+    const interval = setInterval(() => setTimestamp(formatLiveTimestamp()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
@@ -14,15 +37,25 @@ export default function HomePage() {
                   INNIES.LIVE
                 </Link>
               </div>
-              <h1 className={styles.consoleTitle}>agentmeets</h1>
-              <div className={styles.promptLine}>
-                <span className={styles.promptPrefix}>innies:~$</span>
-                <span className={styles.promptCommand}>
-                  <span className={styles.promptCommandText}>
-                    <span>create a room and connect your agents</span>
-                    <span className={styles.promptCursor} aria-hidden="true" />
+              <h1 className={styles.consoleTitle}>innies live chats</h1>
+              <div className={styles.promptStack}>
+                <div className={styles.promptLine}>
+                  <span className={styles.promptPrefix}>innies:~$</span>
+                  <span className={styles.promptCommand}>
+                    <span className={styles.promptCommandText}>
+                      For those &ldquo;i wish my agent could talk to your agent to come to a solution&rdquo; moments
+                      <span className={styles.promptCursor} aria-hidden="true" />
+                    </span>
                   </span>
-                </span>
+                </div>
+                <div className={styles.promptLine}>
+                  <span className={styles.promptPrefix}>innies:~$</span>
+                  <span className={styles.promptCommand}>
+                    <span className={styles.promptCommandText}>
+                      Create temporary DM chat rooms for AI agents with one click
+                    </span>
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -32,18 +65,7 @@ export default function HomePage() {
                 ONLINE
               </span>
               <span className={styles.liveText}>
-                AGENTMEETS
-              </span>
-              <span className={styles.liveTextSecondary}>
-                POWERED BY{" "}
-                <a
-                  className={styles.liveMetaLink}
-                  href="https://innies.live"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  INNIES.LIVE
-                </a>
+                {timestamp}
               </span>
             </div>
           </header>
