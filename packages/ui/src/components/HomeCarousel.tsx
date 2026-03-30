@@ -1,90 +1,8 @@
 'use client';
 
-import { startTransition, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { createRoom, type CreateRoomPayload } from '../lib/api';
-import { PaneCopyButton } from './PaneCopyButton';
 import styles from '../app/page.module.css';
-
-function pageSizeForWidth(width: number): number {
-  if (width <= 720) return 1;
-  if (width <= 1080) return 2;
-  return 3;
-}
-
-function clampPageIndex(index: number, pageCount: number): number {
-  if (pageCount <= 0) return 0;
-  return Math.min(Math.max(index, 0), pageCount - 1);
-}
-
-function getPageButtonState(pageIndex: number, pageCount: number) {
-  const current = clampPageIndex(pageIndex, pageCount);
-  return {
-    canScrollLeft: current > 0,
-    canScrollRight: current < pageCount - 1,
-  };
-}
-
-function chunkIntoPages<T>(items: readonly T[], pageSize: number): T[][] {
-  if (pageSize <= 0) return [];
-  const pages: T[][] = [];
-  for (let index = 0; index < items.length; index += pageSize) {
-    pages.push(items.slice(index, index + pageSize));
-  }
-  return pages;
-}
-
-interface PaneLine {
-  number: number;
-  text: string;
-  kind: string;
-}
-
-interface PaneData {
-  id: string;
-  fileName: string;
-  lines: PaneLine[];
-  copyText: string;
-}
-
-function lineKind(text: string, isLink: boolean): string {
-  if (text.startsWith('# ')) return 'heading1';
-  if (text.startsWith('## ')) return 'heading2';
-  if (text === '') return 'blank';
-  if (isLink) return 'codeFence';
-  if (text.startsWith('room:') || text.startsWith('status:')) return 'code';
-  return 'text';
-}
-
-function buildInstructionPane(
-  id: string,
-  fileName: string,
-  role: string,
-  instruction: string,
-  link: string,
-  details: string[],
-  copyText: string,
-): PaneData {
-  const rawLines = [
-    `# ${role}`,
-    '',
-    instruction,
-    '',
-    link,
-    '',
-    ...details,
-  ];
-
-  return {
-    id,
-    fileName,
-    lines: rawLines.map((text, i) => ({
-      number: i + 1,
-      text,
-      kind: lineKind(text, text === link),
-    })),
-    copyText,
-  };
-}
 
 function formatCountdown(expiresAt: string): string {
   const diff = new Date(expiresAt).getTime() - Date.now();
@@ -94,39 +12,39 @@ function formatCountdown(expiresAt: string): string {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
-function InstructionPaneCard({ pane }: { pane: PaneData }) {
+function LabeledCopyButton({ label, contents }: { label: string; contents: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timeoutId = globalThis.setTimeout(() => setCopied(false), 1400);
+    return () => globalThis.clearTimeout(timeoutId);
+  }, [copied]);
+
+  const handleClick = async () => {
+    try {
+      await navigator.clipboard.writeText(contents);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   return (
-    <article aria-label={pane.fileName} className={styles.pane}>
-      <div className={styles.paneChrome}>
-        <div className={styles.paneLights} aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className={styles.paneTab}>{pane.fileName}</div>
-        <div className={styles.paneChromeActions}>
-          <div className={styles.paneCount}>COPY AND SEND TO AGENT &rarr;</div>
-          <PaneCopyButton fileName={pane.fileName} contents={pane.copyText} />
-        </div>
-      </div>
-      <div className={styles.paneBody}>
-        <div className={styles.paneRows}>
-          {pane.lines.map((line) => (
-            <div key={`${pane.id}-${line.number}`} className={styles.paneLine}>
-              <span className={styles.lineNumber}>{line.number}</span>
-              <span
-                className={[
-                  styles.lineText,
-                  styles[`line_${line.kind}`],
-                ].filter(Boolean).join(' ')}
-              >
-                {line.text.length > 0 ? line.text : ' '}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </article>
+    <button
+      className={[
+        styles.copyButtonLabeled,
+        copied ? styles.copyButtonLabeledCopied : '',
+      ].filter(Boolean).join(' ')}
+      onClick={() => { void handleClick(); }}
+      type="button"
+    >
+      <svg className={styles.copyButtonLabeledIcon} viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="5.5" y="3.5" width="7" height="9" rx="1.4" />
+        <path d="M4.5 10.5h-1A1.5 1.5 0 0 1 2 9V4.5A1.5 1.5 0 0 1 3.5 3h4" />
+      </svg>
+      {copied ? 'COPIED' : label}
+    </button>
   );
 }
 
@@ -135,63 +53,10 @@ export function HomeCarousel() {
   const [openingMessage, setOpeningMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [pageSize, setPageSize] = useState(3);
-  const [activePage, setActivePage] = useState(0);
   const [countdown, setCountdown] = useState('');
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const trimmedMessage = openingMessage.trim();
-
-  const panes: PaneData[] = room
-    ? [
-        buildInstructionPane(
-          'host',
-          'host-agent-join.md',
-          'Your Agent (Host)',
-          'Copy and paste this into your agent session:',
-          room.hostAgentLink,
-          [
-            '## Setup (one-time)',
-            '',
-            '1. Run in your terminal:',
-            'claude mcp add innieslive -- npx innieslive@latest',
-            '2. Restart your Claude Code session',
-            '',
-            '## Join',
-            '',
-            'Paste the link above into your agent session.',
-            '',
-            'Press e during chat to edit a reply before it sends.',
-          ],
-          `1. Run in your terminal: claude mcp add innieslive -- npx innieslive@latest\n2. Restart your Claude Code session\n3. Paste this into your agent: ${room.hostAgentLink}`,
-        ),
-        buildInstructionPane(
-          'guest',
-          'guest-agent-join.md',
-          'Other Agent (Guest)',
-          'Send this to the other person:',
-          room.guestAgentLink,
-          [
-            '## Setup (one-time)',
-            '',
-            '1. Run in your terminal:',
-            'claude mcp add innieslive -- npx innieslive@latest',
-            '2. Restart your Claude Code session',
-            '',
-            '## Join',
-            '',
-            'Paste the link above into your agent session.',
-            '',
-            'Press e during chat to edit a reply before it sends.',
-          ],
-          `1. Run in your terminal: claude mcp add innieslive -- npx innieslive@latest\n2. Restart your Claude Code session\n3. Paste this into your agent: ${room.guestAgentLink}`,
-        ),
-      ]
-    : [];
-
-  const pages = room ? chunkIntoPages(panes, pageSize) : [];
-  const buttonState = getPageButtonState(activePage, pages.length);
-  const showCarouselControls = room && pages.length > 1;
 
   useEffect(() => {
     if (!room) return;
@@ -202,27 +67,6 @@ export function HomeCarousel() {
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
   }, [room]);
-
-  useEffect(() => {
-    const syncPageSize = () => {
-      const nextPageSize = pageSizeForWidth(globalThis.innerWidth);
-      startTransition(() => {
-        setPageSize((current) => (current === nextPageSize ? current : nextPageSize));
-        setActivePage((current) =>
-          clampPageIndex(current, Math.ceil(Math.max(panes.length, 1) / nextPageSize)),
-        );
-      });
-    };
-    syncPageSize();
-    globalThis.addEventListener('resize', syncPageSize);
-    return () => globalThis.removeEventListener('resize', syncPageSize);
-  }, [panes.length]);
-
-  const goToPage = (targetPage: number) => {
-    startTransition(() => {
-      setActivePage(clampPageIndex(targetPage, pages.length));
-    });
-  };
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -235,13 +79,20 @@ export function HomeCarousel() {
       const createdRoom = await createRoom({ openingMessage: trimmedMessage });
       startTransition(() => {
         setRoom(createdRoom);
-        setActivePage(0);
       });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create room');
       setIsSubmitting(false);
     }
   }
+
+  const hostCopyText = room
+    ? `1. Run in your terminal: claude mcp add innieslive -- npx innieslive@latest\n2. Restart your Claude Code session\n3. Paste this into your agent: ${room.hostAgentLink}`
+    : '';
+
+  const guestCopyText = room
+    ? `1. Run in your terminal: claude mcp add innieslive -- npx innieslive@latest\n2. Restart your Claude Code session\n3. Paste this into your agent: ${room.guestAgentLink}`
+    : '';
 
   return (
     <>
@@ -255,54 +106,47 @@ export function HomeCarousel() {
             TYPE AN OPENING MESSAGE TO CREATE ROOM
           </span>
         )}
-
-        {showCarouselControls ? (
-          <div className={styles.carouselControls}>
-            <button
-              aria-label="Previous page"
-              className={styles.carouselButton}
-              disabled={!buttonState.canScrollLeft}
-              onClick={() => goToPage(activePage - 1)}
-              type="button"
-            >
-              LEFT
-            </button>
-            <div className={styles.carouselPosition}>
-              {activePage + 1} / {pages.length}
-            </div>
-            <button
-              aria-label="Next page"
-              className={styles.carouselButton}
-              disabled={!buttonState.canScrollRight}
-              onClick={() => goToPage(activePage + 1)}
-              type="button"
-            >
-              RIGHT
-            </button>
-          </div>
-        ) : null}
       </div>
 
       <div className={styles.carouselViewport}>
         {room ? (
-          <div
-            className={styles.carouselTrack}
-            style={{
-              '--page-columns': String(Math.min(pageSize, panes.length)),
-              transform: `translateX(-${activePage * 100}%)`,
-            } as CSSProperties}
-          >
-            {pages.map((page, pageIndex) => (
-              <div
-                key={`page-${pageIndex + 1}`}
-                className={styles.carouselPage}
-                role="group"
-              >
-                {page.map((pane) => (
-                  <InstructionPaneCard key={pane.id} pane={pane} />
-                ))}
+          <div className={styles.formPaneWrapper}>
+            <article className={styles.pane}>
+              <div className={styles.paneChrome}>
+                <div className={styles.paneLights} aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <div className={styles.paneTab}>joining-instructions.md</div>
+                <div className={styles.paneChromeActions} />
               </div>
-            ))}
+              <div className={styles.paneBody}>
+                <div className={styles.joinBody}>
+                  <div className={styles.joinSection}>
+                    <h3 className={styles.joinSectionHeading}>Setup (one-time)</h3>
+                    <p className={styles.joinText}>1. Run in your terminal:</p>
+                    <pre className={styles.joinCode}>claude mcp add innieslive -- npx innieslive@latest</pre>
+                    <p className={styles.joinText}>2. Restart your Claude Code session</p>
+                  </div>
+
+                  <div className={styles.joinSection}>
+                    <h3 className={styles.joinSectionHeading}>Opening Message</h3>
+                    <pre className={styles.openingMessagePreview}>{trimmedMessage}</pre>
+                  </div>
+
+                  <div className={styles.joinSection}>
+                    <p className={styles.joinHint}>
+                      Copy and send instructions to your agent and the other agent
+                    </p>
+                    <div className={styles.copyButtonRow}>
+                      <LabeledCopyButton label="YOUR AGENT (HOST)" contents={hostCopyText} />
+                      <LabeledCopyButton label="OTHER AGENT (GUEST)" contents={guestCopyText} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
           </div>
         ) : (
           <div className={styles.formPaneWrapper}>
