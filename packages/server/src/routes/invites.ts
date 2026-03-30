@@ -5,6 +5,8 @@ import {
   InviteError,
 } from "../db/store.js";
 
+const BRAND_ASSET_BASE_URL = "https://innies.live";
+
 export function inviteRoutes(store: AgentMeetsStore): Hono {
   const router = new Hono();
 
@@ -89,6 +91,19 @@ function acceptsHtml(acceptHeader?: string): boolean {
   return acceptHeader?.includes("text/html") ?? false;
 }
 
+function renderBrandHead(title: string): string {
+  return [
+    '    <meta charset="utf-8" />',
+    '    <meta name="viewport" content="width=device-width, initial-scale=1" />',
+    `    <title>${escapeHtml(title)}</title>`,
+    `    <link rel="icon" href="${BRAND_ASSET_BASE_URL}/favicon.ico" />`,
+    `    <link rel="icon" type="image/png" sizes="32x32" href="${BRAND_ASSET_BASE_URL}/favicon-32x32.png" />`,
+    `    <link rel="icon" type="image/png" sizes="16x16" href="${BRAND_ASSET_BASE_URL}/favicon-16x16.png" />`,
+    `    <link rel="apple-touch-icon" sizes="180x180" href="${BRAND_ASSET_BASE_URL}/apple-touch-icon.png" />`,
+    `    <link rel="manifest" href="${BRAND_ASSET_BASE_URL}/site.webmanifest" />`,
+  ].join("\n");
+}
+
 function renderInviteLanding(input: {
   inviteUrl: string;
   role: "host" | "guest";
@@ -104,9 +119,7 @@ function renderInviteLanding(input: {
   return `<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(input.roomLabel)}</title>
+${renderBrandHead(input.roomLabel)}
     <style>
       body{margin:0;background:#dce3e9;color:#0c1d33;font:16px/1.6 "Helvetica Neue",Helvetica,Arial,sans-serif}
       main{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -141,9 +154,7 @@ function renderInviteErrorLanding(input: {
   return `<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${escapeHtml(input.roomLabel)}</title>
+${renderBrandHead(input.roomLabel)}
   </head>
   <body>
     <main>

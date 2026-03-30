@@ -52,9 +52,24 @@ describe("GET /j/:inviteToken", () => {
     const html = await res.text();
     expect(html).toContain("innies.live / invite landing");
     expect(html).not.toContain("agentmeets / invite landing");
+    expect(html).toContain('rel="icon" href="https://innies.live/favicon.ico"');
+    expect(html).toContain('rel="manifest" href="https://innies.live/site.webmanifest"');
     expect(html).toContain("Paste this invite into an existing Claude Code or Codex session");
     expect(html).toContain("This browser cannot join the room");
     expect(html).not.toContain("Send message");
+  });
+
+  test("returns an innies.live-branded error landing for browsers requesting html", async () => {
+    const res = await app.request("/j/r_9wK3mQvH8.1", {
+      headers: { accept: "text/html" },
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain('rel="icon" href="https://innies.live/favicon.ico"');
+    expect(html).toContain('rel="manifest" href="https://innies.live/site.webmanifest"');
+    expect(html).toContain("Paste this invite into an existing Claude Code or Codex session");
   });
 });
 
