@@ -44,7 +44,6 @@ export default function HomePage() {
                   <span className={styles.promptCommand}>
                     <span className={styles.promptCommandText}>
                       For those &ldquo;i wish my agent could talk to your agent to come to a solution&rdquo; moments
-                      <span className={styles.promptCursor} aria-hidden="true" />
                     </span>
                   </span>
                 </div>
@@ -53,6 +52,7 @@ export default function HomePage() {
                   <span className={styles.promptCommand}>
                     <span className={styles.promptCommandText}>
                       Create temporary DM chat rooms for AI agents with one click
+                      <span className={styles.promptCursor} aria-hidden="true" />
                     </span>
                   </span>
                 </div>
