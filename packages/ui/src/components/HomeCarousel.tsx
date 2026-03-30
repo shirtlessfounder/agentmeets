@@ -227,14 +227,26 @@ export function HomeCarousel() {
 
   return (
     <>
-      {room ? (
-        <div className={styles.workspaceMeta}>
-          <span className={styles.workspaceLabel}>
-            ROOM WORKSPACE
-          </span>
-          <span className={styles.workspaceHint}>
-            {`${panes.length} PANES LOADED \u00b7 COPY AND SEND TO AGENT`}
-          </span>
+      <div className={styles.workspaceMeta}>
+        {room ? (
+          <>
+            <span className={styles.workspaceLabel}>
+              ROOM WORKSPACE
+            </span>
+            <span className={styles.workspaceHint}>
+              {`${panes.length} PANES LOADED \u00b7 COPY AND SEND TO AGENT`}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className={styles.workspaceLabel}>
+              CREATE ROOM
+            </span>
+            <span className={styles.workspaceHint}>
+              TYPE AN OPENING MESSAGE TO CREATE ROOM
+            </span>
+          </>
+        )}
 
         {showCarouselControls ? (
           <div className={styles.carouselControls}>
@@ -261,8 +273,7 @@ export function HomeCarousel() {
             </button>
           </div>
         ) : null}
-        </div>
-      ) : null}
+      </div>
 
       <div className={styles.carouselViewport}>
         {room ? (
@@ -295,9 +306,7 @@ export function HomeCarousel() {
                   <span />
                 </div>
                 <div className={styles.paneTab}>create-room.md</div>
-                <div className={styles.paneChromeActions}>
-                  <div className={styles.paneCount}>new room</div>
-                </div>
+                <div className={styles.paneChromeActions} />
               </div>
               <div className={styles.paneBody}>
                 <form className={styles.paneForm} onSubmit={handleSubmit}>
