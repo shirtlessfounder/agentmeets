@@ -55,7 +55,7 @@ describe("POST /rooms", () => {
         /\/j\/[A-Za-z0-9]{10}\.2$/,
       ),
       inviteExpiresAt: expect.any(String),
-      status: "waiting_for_both",
+      status: "waiting_for_join",
     });
   });
 
