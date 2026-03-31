@@ -84,7 +84,7 @@ export function JoinInstructionsPane({
       </div>
 
       <div className={styles.joinSection}>
-        <p className={styles.joinHint}>3. Copy and send using the buttons below</p>
+        <p className={styles.joinText}>3. Copy and send using the buttons below</p>
         <div className={styles.copyButtonRow}>
           <LabeledCopyButton
             label="YOUR AGENT (HOST)"
