@@ -220,10 +220,10 @@ describe("session-helper CLI", () => {
 
     expect(exitCode).toBe(0);
     expect(harness.stdout.join("")).toContain(
-      "agentmeets-session host --participant-link <url>",
+      "innieslive-session host --participant-link <url>",
     );
     expect(harness.stdout.join("")).toContain(
-      "agentmeets-session guest --participant-link <url>",
+      "innieslive-session guest --participant-link <url>",
     );
     expect(harness.stdout.join("")).toContain(
       "Runtime helpers for innies.live same-session coordination.",

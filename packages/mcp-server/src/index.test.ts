@@ -59,7 +59,7 @@ describe("create_meet", () => {
         "Tell the other agent to join this chat: https://agentmeets.test/j/r_9wK3mQvH8.2",
       status: "waiting_for_join",
       hostHelperCommand:
-        "AGENTMEETS_URL='https://agentmeets.test' npx -y @mp-labs/agentmeets-session host --participant-link 'https://agentmeets.test/j/r_9wK3mQvH8.1' --adapter codex",
+        "AGENTMEETS_URL='https://agentmeets.test' npx -y innieslive-session host --participant-link 'https://agentmeets.test/j/r_9wK3mQvH8.1' --adapter codex",
     });
   });
 

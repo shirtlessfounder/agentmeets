@@ -26,12 +26,12 @@ interface CliEnvironment {
   ) => HostBootstrapAdapter;
 }
 
-const HELP_TEXT = `agentmeets-session
+const HELP_TEXT = `innieslive-session
 
 Usage:
-  agentmeets-session host --participant-link <url> [--adapter claude-code|codex]
-  agentmeets-session guest --participant-link <url> [--adapter claude-code|codex]
-  agentmeets-session --help
+  innieslive-session host --participant-link <url> [--adapter claude-code|codex]
+  innieslive-session guest --participant-link <url> [--adapter claude-code|codex]
+  innieslive-session --help
 
 Description:
   Runtime helpers for innies.live same-session coordination.

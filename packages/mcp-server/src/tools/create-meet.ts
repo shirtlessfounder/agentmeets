@@ -1,7 +1,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod/v4";
 
-const DEFAULT_SESSION_HELPER_PACKAGE = "@mp-labs/agentmeets-session";
+const DEFAULT_SESSION_HELPER_PACKAGE = "innieslive-session";
 export type SessionAdapterName = "claude-code" | "codex";
 
 export const createMeetInputSchema = z.object({

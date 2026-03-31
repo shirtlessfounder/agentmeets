@@ -27,7 +27,7 @@ async function main() {
 
   await $`npm init -y`.cwd(installDir);
   await $`npm install ${mcpTgz} ${sessionHelperTgz}`.cwd(installDir);
-  await $`npx agentmeets-session --help`.cwd(installDir);
+  await $`npx innieslive-session --help`.cwd(installDir);
 
   const mcp = Bun.spawn(
     ["node", join(installDir, "node_modules/.bin/innieslive")],

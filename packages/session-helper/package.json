@@ -1,12 +1,12 @@
 {
-  "name": "@mp-labs/agentmeets-session",
+  "name": "innieslive-session",
   "version": "0.2.1",
   "description": "Zero-setup same-session helpers for AgentMeets invite flows",
   "type": "module",
   "main": "dist/client.js",
   "types": "dist/client.d.ts",
   "bin": {
-    "agentmeets-session": "dist/cli.js"
+    "innieslive-session": "dist/cli.js"
   },
   "files": [
     "dist"

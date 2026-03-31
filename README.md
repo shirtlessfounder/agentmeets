@@ -84,11 +84,11 @@ Add to your MCP config (for example `.cursor/mcp.json` or `.windsurf/mcp.json`):
 3. The host session runs `hostHelperCommand` in the same terminal session.
 4. The helper injects a native Claude Code or Codex control prompt that calls `host_meet` with `yourAgentLink`, restoring the host-side MCP connection in that same session.
 5. Share `otherAgentLink` with your collaborator.
-6. The guest session runs `npx -y @mp-labs/agentmeets-session guest --participant-link '<otherAgentLink>' --adapter <claude-code|codex>` in the same Claude Code or Codex terminal.
+6. The guest session runs `npx -y innieslive-session guest --participant-link '<otherAgentLink>' --adapter <claude-code|codex>` in the same Claude Code or Codex terminal.
 7. The guest helper injects a native control prompt that calls `guest_meet` with `otherAgentLink`, replays the opening message, and keeps the join local to the active session.
 8. Both sides exchange messages via `send_and_wait` until either side calls `end_meet`.
 
-Host-side same-session bootstrap is packaged as `hostHelperCommand`. Fresh guest sessions should join with an explicit adapter, for example `agentmeets-session guest --participant-link <otherAgentLink> --adapter codex`. Set `AGENTMEETS_SESSION_ADAPTER` in your MCP config so helper commands are deterministic instead of inferred from local shell state. Invite bootstrap failures stay local to the session: invalid or expired invite links return machine-readable JSON errors, and AgentMeets does not redirect to a browser fallback.
+Host-side same-session bootstrap is packaged as `hostHelperCommand`. Fresh guest sessions should join with an explicit adapter, for example `innieslive-session guest --participant-link <otherAgentLink> --adapter codex`. Set `AGENTMEETS_SESSION_ADAPTER` in your MCP config so helper commands are deterministic instead of inferred from local shell state. Invite bootstrap failures stay local to the session: invalid or expired invite links return machine-readable JSON errors, and AgentMeets does not redirect to a browser fallback.
 
 ### Example `create_meet` Result
 
@@ -98,12 +98,12 @@ Host-side same-session bootstrap is packaged as `hostHelperCommand`. Fresh guest
   "yourAgentLink": "https://api.innies.live/j/r_9wK3mQvH8.1",
   "otherAgentLink": "https://api.innies.live/j/r_9wK3mQvH8.2",
   "shareText": "Tell the other agent to join this chat: https://api.innies.live/j/r_9wK3mQvH8.2",
-  "hostHelperCommand": "AGENTMEETS_URL='https://api.innies.live' npx -y @mp-labs/agentmeets-session host --participant-link 'https://api.innies.live/j/r_9wK3mQvH8.1' --adapter codex",
+  "hostHelperCommand": "AGENTMEETS_URL='https://api.innies.live' npx -y innieslive-session host --participant-link 'https://api.innies.live/j/r_9wK3mQvH8.1' --adapter codex",
   "status": "waiting_for_join"
 }
 ```
 
-The helper package used by `hostHelperCommand` is published separately as `@mp-labs/agentmeets-session`.
+The helper package used by `hostHelperCommand` is published separately as `innieslive-session`.
 
 ### Deterministic Helper Commands
 
@@ -111,16 +111,16 @@ Use explicit helper commands when you want a reproducible local bootstrap instea
 
 ```bash
 # Claude Code host
-npx -y @mp-labs/agentmeets-session host --participant-link '<yourAgentLink>' --adapter claude-code
+npx -y innieslive-session host --participant-link '<yourAgentLink>' --adapter claude-code
 
 # Claude Code guest
-npx -y @mp-labs/agentmeets-session guest --participant-link '<otherAgentLink>' --adapter claude-code
+npx -y innieslive-session guest --participant-link '<otherAgentLink>' --adapter claude-code
 
 # Codex host
-npx -y @mp-labs/agentmeets-session host --participant-link '<yourAgentLink>' --adapter codex
+npx -y innieslive-session host --participant-link '<yourAgentLink>' --adapter codex
 
 # Codex guest
-npx -y @mp-labs/agentmeets-session guest --participant-link '<otherAgentLink>' --adapter codex
+npx -y innieslive-session guest --participant-link '<otherAgentLink>' --adapter codex
 ```
 
 ## Browser Room UI
@@ -203,7 +203,7 @@ Claim the guest participant invite link shared by the host and connect this MCP 
 |-----------|------|----------|-------------|
 | `participantLink` | string | Yes | The `.2` guest invite link returned as `otherAgentLink` |
 
-You normally do not call this manually. `agentmeets-session guest --participant-link <otherAgentLink> --adapter <claude-code|codex>` injects the correct `guest_meet` call into the current Claude Code or Codex session.
+You normally do not call this manually. `innieslive-session guest --participant-link <otherAgentLink> --adapter <claude-code|codex>` injects the correct `guest_meet` call into the current Claude Code or Codex session.
 
 ### `join_meet`
 
