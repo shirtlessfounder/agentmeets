@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { AnySchema } from "@modelcontextprotocol/sdk/server/zod-compat.js";
+import { DEFAULT_SEND_AND_WAIT_TIMEOUT_SECONDS } from "@agentmeets/shared";
 import * as z from "zod/v4";
 import { createMeetController } from "./controller.js";
 import {
@@ -16,6 +17,7 @@ const env =
   }).process?.env ?? {};
 const SERVER_URL =
   env.AGENTMEETS_URL?.replace(/\/$/, "") || "https://api.innies.live";
+const SESSION_ADAPTER = env.AGENTMEETS_SESSION_ADAPTER?.trim();
 
 const hostMeetInputSchema = z.object({
   participantLink: z
@@ -34,14 +36,20 @@ const sendAndWaitInputSchema = z.object({
   timeout: z
     .number()
     .optional()
-    .default(300)
-    .describe("Timeout in seconds to wait for a reply (default: 300)"),
+    .default(DEFAULT_SEND_AND_WAIT_TIMEOUT_SECONDS)
+    .describe(`Timeout in seconds to wait for a reply (default: ${DEFAULT_SEND_AND_WAIT_TIMEOUT_SECONDS})`),
 });
-
+const joinMeetInputSchema = z.object({
+  roomId: z.string().describe("Room code to join"),
+});
 
 const controller = createMeetController({
   serverUrl: SERVER_URL,
   fetchFn: fetch,
+  sessionAdapterName:
+    SESSION_ADAPTER === "claude-code" || SESSION_ADAPTER === "codex"
+      ? SESSION_ADAPTER
+      : undefined,
 });
 
 const server = new McpServer({
@@ -64,7 +72,6 @@ server.registerTool<AnySchema, AnySchema>(
   {
     description: HOST_MEET_DESCRIPTION,
     inputSchema: hostMeetInputSchema as unknown as AnySchema,
-    annotations: { readOnlyHint: false },
   },
   async (args: unknown) =>
     controller.hostMeet(args as { participantLink: string }),
@@ -75,10 +82,19 @@ server.registerTool<AnySchema, AnySchema>(
   {
     description: GUEST_MEET_DESCRIPTION,
     inputSchema: guestMeetInputSchema as unknown as AnySchema,
-    annotations: { readOnlyHint: false },
   },
   async (args: unknown) =>
     controller.guestMeet(args as { participantLink: string }),
+);
+
+server.registerTool<AnySchema, AnySchema>(
+  "join_meet",
+  {
+    description: "Join an existing room by room code",
+    inputSchema: joinMeetInputSchema as unknown as AnySchema,
+  },
+  async (args: unknown) =>
+    controller.joinMeet(args as { roomId: string }),
 );
 
 server.registerTool<AnySchema, AnySchema>(
@@ -96,13 +112,10 @@ server.registerTool<AnySchema, AnySchema>(
       "Only stop when the session ends, times out, or you decide the conversation is complete " +
       "(then call end_meet).",
     inputSchema: sendAndWaitInputSchema as unknown as AnySchema,
-    annotations: { readOnlyHint: false },
   },
   async (args: unknown) =>
     controller.sendAndWait(args as { message?: string; timeout?: number }),
 );
-
-
 server.tool(
   "end_meet",
   "End the current meet and disconnect. " +

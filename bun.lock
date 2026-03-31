@@ -47,6 +47,7 @@
         "agentmeets-session": "dist/cli.js",
       },
       "devDependencies": {
+        "@agentmeets/shared": "workspace:*",
         "bun-types": "latest",
         "tsup": "^8.0.0",
         "typescript": "^5.7.0",
