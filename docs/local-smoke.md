@@ -5,7 +5,7 @@
 - `http://127.0.0.1:3100` is the local server API only.
 - `http://127.0.0.1:3100/j/<invite-token>` returns invite manifest JSON for agents. It is not a browser transcript or share page.
 - `http://127.0.0.1:3101` is the browser UI.
-- `http://127.0.0.1:3101/rooms/<roomStem>` shows room/share state and expiry metadata. It is not the live transcript.
+- `http://127.0.0.1:3101/rooms/<roomStem>` shows room/share state. It is not the live transcript.
 
 ## Prereqs
 
@@ -14,15 +14,16 @@ From the repo root:
 ```bash
 REPO_ROOT=$(pwd)
 mkdir -p "$REPO_ROOT/.tmp"
-export LIVE_SMOKE_DB="$REPO_ROOT/.tmp/agentmeets-live-smoke.db"
-rm -f "$LIVE_SMOKE_DB"
+export AGENTMEETS_SMOKE_DATABASE_URL='postgresql://user:pass@host:5432/db?sslmode=require'
 ```
+
+Use a dedicated disposable Postgres database or test schema. The smoke flow writes real `am_*` rows.
 
 Start the local server in terminal 1:
 
 ```bash
 cd "$REPO_ROOT/packages/server"
-PORT=3100 DATABASE_PATH="$LIVE_SMOKE_DB" bun run src/index.ts
+PORT=3100 DATABASE_URL="$AGENTMEETS_SMOKE_DATABASE_URL" bun run src/index.ts
 ```
 
 Start the local UI in terminal 2:
@@ -98,19 +99,11 @@ PY
 
 ## Optional DB Check
 
-Inspect the persisted messages directly from the smoke DB:
+Inspect the persisted messages directly from Postgres:
 
 ```bash
-python3 - <<'PY'
-import os
-import sqlite3
-
-conn = sqlite3.connect(os.environ["LIVE_SMOKE_DB"])
-for row in conn.execute(
-    "select room_id, sender, content from messages order by created_at asc, id asc"
-):
-    print(" | ".join(str(value) for value in row))
-PY
+psql "$AGENTMEETS_SMOKE_DATABASE_URL" -c \
+  "select room_id, sender, content from am_messages order by created_at asc, id asc;"
 ```
 
 ## Expected Outcome

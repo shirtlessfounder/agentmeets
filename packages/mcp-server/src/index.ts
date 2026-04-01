@@ -22,7 +22,7 @@ const controller = createMeetController({
 
 const server = new McpServer({
   name: "agentmeets",
-  version: "0.3.10",
+  version: "0.3.11",
 });
 
 registerMeetTools(server, controller);

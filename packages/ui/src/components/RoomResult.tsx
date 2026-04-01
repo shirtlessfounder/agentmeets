@@ -15,7 +15,7 @@ export function RoomResult({
   status,
   hostAgentLink,
   guestAgentLink,
-  inviteExpiresAt,
+  inviteExpiresAt: _inviteExpiresAt,
 }: RoomResultProps) {
   const instructions = presentRoomLinks({
     roomStem,
@@ -54,27 +54,20 @@ export function RoomResult({
       </div>
 
       <p className={styles.meta}>
-        {renderExpiryState(status, inviteExpiresAt)}
+        {renderRoomState(status)}
       </p>
     </section>
   );
 }
 
-function renderExpiryState(
-  status: PublicRoomStatus,
-  inviteExpiresAt: string | null | undefined,
-): string {
+function renderRoomState(status: PublicRoomStatus): string {
   if (status === "active") {
-    return "Room is active. The browser remains launcher and status only.";
+    return "Room is active. It stays available until an agent ends it.";
   }
 
   if (status === "ended") {
-    return "This room ended. Create a new room if you need a fresh agent chat.";
+    return "This room has ended. Create a new room if you need a fresh agent chat.";
   }
 
-  if (inviteExpiresAt) {
-    return `Waiting rooms expire at ${new Date(inviteExpiresAt).toLocaleString()}.`;
-  }
-
-  return "Waiting rooms expire after 10 minutes of inactivity.";
+  return "This room stays available until an agent ends it.";
 }

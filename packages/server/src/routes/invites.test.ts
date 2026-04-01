@@ -59,6 +59,31 @@ describe("GET /j/:inviteToken", () => {
     expect(html).not.toContain("Send message");
   });
 
+  test("coerces non-string expiry values in the html landing instead of crashing", async () => {
+    await store.createRoom({
+      id: "ABC123",
+      hostToken: "host-token",
+      openingMessage: "Opening hello",
+      roomStem: "r_9wK3mQvH8",
+    });
+    await store.createInvite("ABC123", "r_9wK3mQvH8.1", "2099-03-24 12:05:00");
+
+    const originalGetInviteManifest = store.getInviteManifest.bind(store);
+    store.getInviteManifest = async (inviteToken) => ({
+      ...(await originalGetInviteManifest(inviteToken)),
+      expiresAt: new Date("2099-03-24T12:05:00.000Z") as unknown as string,
+    });
+
+    const res = await app.request("/j/r_9wK3mQvH8.1", {
+      headers: { accept: "text/html" },
+    });
+
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Paste this invite into an existing Claude Code or Codex session");
+    expect(html).toContain("Invite expires at");
+  });
+
   test("returns an innies.live-branded error landing for browsers requesting html", async () => {
     const res = await app.request("/j/r_9wK3mQvH8.1", {
       headers: { accept: "text/html" },

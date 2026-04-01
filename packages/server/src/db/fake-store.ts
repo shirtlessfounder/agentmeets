@@ -93,10 +93,6 @@ export function createFakeAgentMeetsStore(): AgentMeetsStore {
     if (room.status === "closed" || room.status === "expired") {
       throw new InviteError("Invite has expired", 410, "invite_expired");
     }
-    if (new Date(invite.expires_at).getTime() <= Date.now()) {
-      await api.expireRoom(room.id);
-      throw new InviteError("Invite has expired", 410, "invite_expired");
-    }
     return room;
   };
 

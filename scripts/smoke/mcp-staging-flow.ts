@@ -18,10 +18,10 @@
  */
 
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
-  createSmokeDir,
+  readSmokeDatabaseUrl,
   startManagedProcess,
   waitForHttpReady,
 } from "./lib/process";
@@ -47,8 +47,7 @@ function createAgent(serverUrl: string): MeetController {
 /* ── scenarios ── */
 
 async function main() {
-  const smokeDir = await createSmokeDir("mcp-staging-smoke");
-  const databasePath = join(smokeDir, "staging.db");
+  const databaseUrl = readSmokeDatabaseUrl();
   const serverBaseUrl = `http://127.0.0.1:${SERVER_PORT}`;
   const uiBaseUrl = `http://127.0.0.1:${UI_PORT}`;
 
@@ -58,7 +57,7 @@ async function main() {
     join(ROOT, "packages/server"),
     {
       PORT: String(SERVER_PORT),
-      DATABASE_PATH: databasePath,
+      DATABASE_URL: databaseUrl,
     },
   );
 

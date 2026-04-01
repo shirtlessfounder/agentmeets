@@ -13,7 +13,7 @@ export function publicRoomRoutes(store: AgentMeetsStore): Hono {
       return c.json({ error: "room_not_found" }, 404);
     }
 
-    if (await isPublicRoomExpired(store, room)) {
+    if (room.roomStatus === "expired") {
       return c.json({ error: "room_expired" }, 410);
     }
 
@@ -33,41 +33,24 @@ export function publicRoomRoutes(store: AgentMeetsStore): Hono {
   return router;
 }
 
-async function isPublicRoomExpired(
-  store: AgentMeetsStore,
-  room: PublicRoomSnapshot,
-): Promise<boolean> {
-  if (room.roomStatus === "active") {
-    return false;
-  }
-
-  if (room.roomStatus === "closed") {
-    return false;
-  }
-
-  if (room.roomStatus === "expired") {
-    return true;
-  }
-
-  if (!room.inviteExpiresAt) {
-    return false;
-  }
-
-  if (new Date(room.inviteExpiresAt).getTime() > Date.now()) {
-    return false;
-  }
-
-  if (room.roomStatus === "waiting") {
-    await store.expireRoom(room.roomId);
-  }
-
-  return true;
-}
-
 function deriveRouteStatus(room: PublicRoomSnapshot) {
-  return derivePublicRoomStatus({
-    roomStatus: room.roomStatus,
-    hostConnectedAt: room.hostConnectedAt,
-    guestConnectedAt: room.guestConnectedAt,
-  });
+  if (room.roomStatus === "closed" || room.roomStatus === "expired") {
+    return derivePublicRoomStatus({
+      roomStatus: room.roomStatus,
+      hostConnectedAt: room.hostConnectedAt,
+      guestConnectedAt: room.guestConnectedAt,
+    });
+  }
+
+  if (room.hostConnectedAt && room.guestConnectedAt) {
+    return "active";
+  }
+  if (room.hostConnectedAt) {
+    return "waiting_for_guest";
+  }
+  if (room.guestConnectedAt) {
+    return "waiting_for_host";
+  }
+
+  return "waiting_for_both";
 }

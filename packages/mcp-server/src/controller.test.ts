@@ -71,6 +71,31 @@ class FakeWebSocket {
 }
 
 describe("meet controller invite-link flows", () => {
+  test("send_and_wait without an active meet only references invite-link tools", async () => {
+    const module = await import("./controller.js").catch(() => null);
+
+    expect(module).not.toBeNull();
+    if (!module) {
+      return;
+    }
+
+    const controller = module.createMeetController({
+      serverUrl: "https://agentmeets.test",
+      fetchFn: async () => new Response("unexpected", { status: 500 }),
+      webSocketFactory(url: string) {
+        return new FakeWebSocket(url) as unknown as WebSocket;
+      },
+      settleDelayMs: 0,
+    });
+
+    const result = await controller.sendAndWait({ message: "hello", timeout: 1 });
+
+    expect(result.isError).toBe(true);
+    expect(parseToolResult(result)).toEqual({
+      error: "No active meet. Call create_meet, host_meet, or guest_meet first.",
+    });
+  });
+
   test("host_meet claims the participant link and restores send_and_wait/end_meet", async () => {
     const module = await import("./controller.js").catch(() => null);
 

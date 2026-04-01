@@ -49,7 +49,7 @@ describe("GET /public/rooms/:roomStem", () => {
     expect(await res.json()).toEqual({ error: "room_expired" });
   });
 
-  test("returns room details while active even after invite expiry", async () => {
+  test("returns room details while still waiting even after invite expiry", async () => {
     await store.createRoom({
       id: "ROOM01",
       hostToken: "host-token-123",
@@ -58,18 +58,21 @@ describe("GET /public/rooms/:roomStem", () => {
     });
     await store.createInvite("ROOM01", "r_9wK3mQvH8.1", "2000-03-24 12:05:00");
     await store.createInvite("ROOM01", "r_9wK3mQvH8.2", "2000-03-24 12:05:00");
-    await store.joinRoom("ROOM01", "guest-token-123");
 
     const res = await app.request("/public/rooms/r_9wK3mQvH8");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       roomId: "ROOM01",
       roomStem: "r_9wK3mQvH8",
-      status: "active",
+      status: "waiting_for_both",
       hostAgentLink: expect.stringMatching(/\/j\/r_9wK3mQvH8\.1$/),
       guestAgentLink: expect.stringMatching(/\/j\/r_9wK3mQvH8\.2$/),
       inviteExpiresAt: "2000-03-24 12:05:00",
     });
+
+    const room = await store.getRoom("ROOM01");
+    expect(room).not.toBeNull();
+    expect(room!.status).toBe("waiting");
   });
 
   test("returns ended status after the room has ended", async () => {

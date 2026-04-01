@@ -89,6 +89,22 @@ function waitForMessages(ws: WebSocket, count: number): Promise<ServerMessage[]>
   });
 }
 
+function expectNoMessage(ws: WebSocket, durationMs = 100): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onMessage = () => {
+      clearTimeout(timeout);
+      reject(new Error("Unexpected message"));
+    };
+
+    const timeout = setTimeout(() => {
+      ws.removeEventListener("message", onMessage);
+      resolve();
+    }, durationMs);
+
+    ws.addEventListener("message", onMessage, { once: true });
+  });
+}
+
 beforeEach(async () => {
   store = createFakeAgentMeetsStore();
   app = await buildApp();
@@ -184,7 +200,7 @@ describe("browser room presentation", () => {
     guestWs.close();
   });
 
-  test("public room returns ended after an active room disconnects", async () => {
+  test("public room reflects the remaining connected helper after an active-room disconnect", async () => {
     const baseUrl = `http://localhost:${port}`;
     (roomManager as { idleTimeoutMs: number }).idleTimeoutMs = 2_000;
 
@@ -240,19 +256,26 @@ describe("browser room presentation", () => {
     });
     expect(guestMessages[1]).toEqual({ type: "room_active", roomId: created.roomId });
 
-    const endedPromise = waitForMessage(guestWs);
     hostWs.close();
-    expect(await endedPromise).toEqual({ type: "ended", reason: "disconnected" });
+    await Bun.sleep(100);
+    await expectNoMessage(guestWs);
 
     const publicRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
     expect(publicRoom.status).toBe(200);
     expect(await publicRoom.json()).toMatchObject({
       roomStem: created.roomStem,
-      status: "ended",
+      status: "waiting_for_host",
     });
+
+    const room = await store.getRoom(created.roomId);
+    expect(room).not.toBeNull();
+    expect(room!.status).toBe("active");
+    expect(room!.close_reason).toBeNull();
+
+    guestWs.close();
   });
 
-  test("public room and invite manifest return 410 after idle expiry", async () => {
+  test("public room and invite manifest remain available after an idle period", async () => {
     const baseUrl = `http://localhost:${port}`;
 
     const createResponse = await fetch(`${baseUrl}/rooms`, {
@@ -308,25 +331,37 @@ describe("browser room presentation", () => {
     });
     expect(guestMessages[1]).toEqual({ type: "room_active", roomId: created.roomId });
     expect(await hostActivationPromise).toEqual({ type: "room_active", roomId: created.roomId });
-    expect(await waitForMessage(hostWs)).toEqual({ type: "ended", reason: "expired" });
-    expect(await waitForMessage(guestWs)).toEqual({ type: "ended", reason: "expired" });
+    await Bun.sleep(100);
+    await expectNoMessage(hostWs);
+    await expectNoMessage(guestWs);
 
     const publicRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
-    expect(publicRoom.status).toBe(410);
-    expect(await publicRoom.json()).toEqual({ error: "room_expired" });
+    expect(publicRoom.status).toBe(200);
+    expect(await publicRoom.json()).toMatchObject({
+      roomStem: created.roomStem,
+      status: "active",
+    });
 
     const manifest = await fetch(`${baseUrl}/j/${hostInviteToken}`);
-    expect(manifest.status).toBe(410);
-    expect(await manifest.json()).toEqual({ error: "invite_expired" });
+    expect(manifest.status).toBe(200);
+    expect(await manifest.json()).toMatchObject({
+      roomId: created.roomId,
+      roomStem: created.roomStem,
+      role: "host",
+      status: "active",
+    });
 
     const room = await store.getRoom(created.roomId);
     expect(room).not.toBeNull();
-    expect(room!.status).toBe("expired");
-    expect(room!.closed_at).toEqual(expect.any(String));
+    expect(room!.status).toBe("active");
+    expect(room!.closed_at).toBeNull();
     expect(room!.close_reason).toBeNull();
+
+    hostWs.close();
+    guestWs.close();
   });
 
-  test("legacy join path rejects rooms after the invite lifetime elapses", async () => {
+  test("legacy join path still allows joining rooms after the invite lifetime elapses", async () => {
     const baseUrl = `http://localhost:${port}`;
 
     const createResponse = await fetch(`${baseUrl}/rooms`, {
@@ -346,13 +381,15 @@ describe("browser room presentation", () => {
     const joinResponse = await fetch(`${baseUrl}/rooms/${created.roomId}/join`, {
       method: "POST",
     });
-    expect(joinResponse.status).toBe(410);
-    expect(await joinResponse.json()).toEqual({ error: "room_expired" });
+    expect(joinResponse.status).toBe(200);
+    expect(await joinResponse.json()).toMatchObject({
+      guestToken: expect.any(String),
+    });
 
     const room = await store.getRoom(created.roomId);
     expect(room).not.toBeNull();
-    expect(room!.status).toBe("expired");
-    expect(room!.closed_at).toEqual(expect.any(String));
+    expect(room!.status).toBe("active");
+    expect(room!.closed_at).toBeNull();
   });
 
   test("legacy join path does not expire an already-claimed room after invite expiry", async () => {
@@ -394,7 +431,7 @@ describe("browser room presentation", () => {
     expect(room!.guest_token).toEqual(expect.any(String));
   });
 
-  test("claimed invite sessions cannot activate after the original invite TTL elapses", async () => {
+  test("claimed invite sessions can still activate after the original invite TTL elapses", { timeout: 10_000 }, async () => {
     const baseUrl = `http://localhost:${port}`;
     (roomManager as any).idleTimeoutMs = 2_000;
 
@@ -410,6 +447,7 @@ describe("browser room presentation", () => {
 
     const created = (await createResponse.json()) as {
       roomId: string;
+      roomStem: string;
       hostAgentLink: string;
       guestAgentLink: string;
     };
@@ -433,12 +471,20 @@ describe("browser room presentation", () => {
     await Bun.sleep(1_100);
 
     const manifest = await fetch(`${baseUrl}/j/${hostInviteToken}`);
-    expect(manifest.status).toBe(410);
-    expect(await manifest.json()).toEqual({ error: "invite_expired" });
+    expect(manifest.status).toBe(200);
+    expect(await manifest.json()).toMatchObject({
+      roomId: created.roomId,
+      roomStem: created.roomStem,
+      role: "host",
+      status: "waiting_for_both",
+    });
 
     const publicRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
-    expect(publicRoom.status).toBe(410);
-    expect(await publicRoom.json()).toEqual({ error: "room_expired" });
+    expect(publicRoom.status).toBe(200);
+    expect(await publicRoom.json()).toMatchObject({
+      roomStem: created.roomStem,
+      status: "waiting_for_both",
+    });
 
     const hostWs = new WebSocket(
       `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${hostClaim.sessionToken}`,
@@ -446,41 +492,29 @@ describe("browser room presentation", () => {
     const guestWs = new WebSocket(
       `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${guestClaim.sessionToken}`,
     );
+    await waitForOpen(hostWs);
+    const hostActivationPromise = waitForMessage(hostWs);
+    await waitForOpen(guestWs);
 
-    const [hostClose, guestClose] = await Promise.all([
-      new Promise<{ code: number; reason: string }>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Timeout waiting for close")), 5000);
-        hostWs.addEventListener(
-          "close",
-          (event) => {
-            clearTimeout(timeout);
-            resolve({ code: event.code, reason: event.reason });
-          },
-          { once: true },
-        );
-      }),
-      new Promise<{ code: number; reason: string }>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Timeout waiting for close")), 5000);
-        guestWs.addEventListener(
-          "close",
-          (event) => {
-            clearTimeout(timeout);
-            resolve({ code: event.code, reason: event.reason });
-          },
-          { once: true },
-        );
-      }),
-    ]);
-    expect(hostClose.code).not.toBe(1000);
-    expect(guestClose.code).not.toBe(1000);
+    expect(await hostActivationPromise).toEqual({ type: "room_active", roomId: created.roomId });
+
+    const activatedPublicRoom = await fetch(`${baseUrl}/public/rooms/${created.roomStem}`);
+    expect(activatedPublicRoom.status).toBe(200);
+    expect(await activatedPublicRoom.json()).toMatchObject({
+      roomStem: created.roomStem,
+      status: "active",
+    });
 
     const room = await store.getRoom(created.roomId);
     expect(room).not.toBeNull();
-    expect(room!.status).toBe("expired");
-    expect(room!.closed_at).toEqual(expect.any(String));
+    expect(room!.status).toBe("active");
+    expect(room!.closed_at).toBeNull();
+
+    hostWs.close();
+    guestWs.close();
   });
 
-  test("claimed rooms fall back to waiting after a disconnect until the invite expires", async () => {
+  test("claimed rooms fall back to waiting after a disconnect", async () => {
     const baseUrl = `http://localhost:${port}`;
 
     const createResponse = await fetch(`${baseUrl}/rooms`, {

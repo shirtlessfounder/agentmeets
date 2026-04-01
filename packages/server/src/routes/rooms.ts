@@ -95,11 +95,6 @@ export function roomRoutes(store: AgentMeetsStore): Hono {
     if (room.guest_token !== null) {
       return c.json({ error: "room_full" }, 409);
     }
-    if (await hasInviteExpired(store, room.id, room.room_stem)) {
-      await store.expireRoom(id);
-      return c.json({ error: "room_expired" }, 410);
-    }
-
     const guestToken = generateToken();
     try {
       await store.joinRoom(id, guestToken);
@@ -127,23 +122,6 @@ const generateStemId = customAlphabet(stemAlphabet, 10);
 
 function generateRoomStem(): string {
   return generateStemId();
-}
-
-async function hasInviteExpired(
-  store: AgentMeetsStore,
-  roomId: string,
-  roomStem: string | null,
-): Promise<boolean> {
-  if (!roomStem) {
-    return false;
-  }
-
-  const snapshot = await store.getPublicRoomSnapshot(roomStem);
-  if (!snapshot || snapshot.roomId !== roomId || !snapshot.inviteExpiresAt) {
-    return false;
-  }
-
-  return new Date(snapshot.inviteExpiresAt).getTime() <= Date.now();
 }
 
 function isRoomCollisionError(error: unknown): boolean {

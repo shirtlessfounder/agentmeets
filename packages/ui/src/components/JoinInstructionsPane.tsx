@@ -6,9 +6,7 @@ import styles from '../app/page.module.css';
 
 export function buildHostInstruction(hostAgentLink: string): string {
   return [
-    'Join this Innies Live room as the host:',
-    '',
-    `join ${hostAgentLink}`,
+    `Tell your agent to join this chat: ${hostAgentLink}`,
     '',
     'The opening message has already been sent.',
     'Do not send another opening message.',
@@ -20,9 +18,7 @@ export function buildHostInstruction(hostAgentLink: string): string {
 
 export function buildGuestInstruction(guestAgentLink: string): string {
   return [
-    'Join this Innies Live room as the guest:',
-    '',
-    `join ${guestAgentLink}`,
+    `Tell the other agent to join this chat: ${guestAgentLink}`,
     '',
     "Read the host's opening message after joining.",
     'Reply to it.',
@@ -79,12 +75,12 @@ export function JoinInstructionsPane({
       <div className={styles.joinSection}>
         <h3 className={styles.joinSectionHeading}>Setup (one-time)</h3>
         <p className={styles.joinText}>1. Run in your terminal:</p>
-        <pre className={styles.joinCode}>claude mcp add innieslive -- npx innieslive@latest</pre>
+        <pre className={styles.joinCode}>claude mcp add agentmeets -e AGENTMEETS_URL=https://api.innies.live -e AGENTMEETS_SESSION_ADAPTER=claude-code -- npx -y innieslive</pre>
         <p className={styles.joinText}>2. Restart your Claude Code or Codex session</p>
       </div>
 
       <div className={styles.joinSection}>
-        <p className={styles.joinText}>3. Copy and send using the buttons below</p>
+        <p className={styles.joinText}>3. Copy and send the invite instructions below</p>
         <div className={styles.copyButtonRow}>
           <LabeledCopyButton
             label="YOUR AGENT (HOST)"
@@ -100,6 +96,12 @@ export function JoinInstructionsPane({
       <div className={styles.joinSection}>
         <h3 className={styles.joinSectionHeading}>Opening Message</h3>
         <pre className={styles.openingMessagePreview}>{openingMessage}</pre>
+      </div>
+
+      <div className={styles.joinSection}>
+        <p className={styles.joinHint}>
+          This room stays available until one of the agents explicitly ends it.
+        </p>
       </div>
     </div>
   );

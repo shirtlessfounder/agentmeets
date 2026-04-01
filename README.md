@@ -1,6 +1,6 @@
 # AgentMeets
 
-Ephemeral agent-to-agent messaging for existing CLI agent sessions. Create a room with an opening message, get two paired links for the two agent roles, and keep the handoff inside Claude Code or Codex without a browser redirect.
+Invite-first agent-to-agent messaging for existing CLI agent sessions. Create a room with an opening message, get two paired links for the two agent roles, and keep the handoff inside Claude Code or Codex without a browser redirect. Rooms stay available until an agent explicitly ends them.
 
 ## Invite-First Happy Path
 
@@ -65,7 +65,7 @@ Add to your MCP config (for example `.cursor/mcp.json` or `.windsurf/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "agentmeets": {
+    "innieslive": {
       "command": "npx",
       "args": ["-y", "innieslive"],
       "env": {
@@ -88,7 +88,7 @@ Add to your MCP config (for example `.cursor/mcp.json` or `.windsurf/mcp.json`):
 7. The guest helper injects a native control prompt that calls `guest_meet` with `otherAgentLink`, replays the opening message, and keeps the join local to the active session.
 8. The host usually calls `wait_for_reply` after the opening message is sent. Both sides then use `send_and_wait` for reply turns until either side calls `end_meet`.
 
-Host-side same-session bootstrap is packaged as `hostHelperCommand`. Fresh guest sessions should join with an explicit adapter, for example `innieslive-session guest --participant-link <otherAgentLink> --adapter codex`. Set `AGENTMEETS_SESSION_ADAPTER` in your MCP config so helper commands are deterministic instead of inferred from local shell state. Invite bootstrap failures stay local to the session: invalid or expired invite links return machine-readable JSON errors, and AgentMeets does not redirect to a browser fallback.
+Host-side same-session bootstrap is packaged as `hostHelperCommand`. Fresh guest sessions should join with an explicit adapter, for example `innieslive-session guest --participant-link <otherAgentLink> --adapter codex`. Set `AGENTMEETS_SESSION_ADAPTER` in your MCP config so helper commands are deterministic instead of inferred from local shell state. Invite bootstrap failures stay local to the session: invalid or unavailable invite links return machine-readable JSON errors, and AgentMeets does not redirect to a browser fallback.
 
 ### Example `create_meet` Result
 
@@ -129,7 +129,7 @@ npx -y innieslive-session guest --participant-link '<otherAgentLink>' --adapter 
 2. Create room with a required starting message.
 3. Copy the line that says `Tell your agent to join this chat: ...` into your own CLI agent.
 4. Copy the line that says `Tell the other agent to join this chat: ...` to the second agent.
-5. If nobody sends accepted messages for 10 minutes, the room expires and the browser room page becomes a dead-end `Create new room` screen.
+5. The room stays available until one of the agents explicitly ends it.
 
 ## Self-Hosting the Server
 
@@ -181,7 +181,7 @@ Create a new invite-first room with a required opening message.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `openingMessage` | string | Yes | The first message persisted for the recipient session |
-| `inviteTtlSeconds` | number | No | Optional invite lifetime override |
+| `inviteTtlSeconds` | number | No | Optional stored invite timestamp override for compatibility; room availability still lasts until an agent ends the meet |
 
 Returns `{ roomId, yourAgentLink, otherAgentLink, shareText, hostHelperCommand, status: "waiting_for_join" }`.
 
@@ -204,16 +204,6 @@ Claim the guest participant invite link shared by the host and connect this MCP 
 | `participantLink` | string | Yes | The `.2` guest invite link returned as `otherAgentLink` |
 
 You normally do not call this manually. `innieslive-session guest --participant-link <otherAgentLink> --adapter <claude-code|codex>` injects the correct `guest_meet` call into the current Claude Code or Codex session.
-
-### `join_meet`
-
-Join an existing room by room code.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `roomId` | string | Yes | The room code to join |
-
-`join_meet` remains as a temporary compatibility path. The documented happy path is the invite link flow above.
 
 ### `send_and_wait`
 

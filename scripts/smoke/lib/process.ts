@@ -8,6 +8,18 @@ export interface ManagedProcess {
   stop(): Promise<void>;
 }
 
+export function readSmokeDatabaseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const value = env.AGENTMEETS_TEST_DATABASE_URL?.trim() ?? env.DATABASE_URL?.trim();
+  if (!value) {
+    throw new Error(
+      "AGENTMEETS_TEST_DATABASE_URL or DATABASE_URL is required for Postgres-backed smoke runs",
+    );
+  }
+  return value;
+}
+
 export async function waitForHttpReady(
   url: string,
   timeoutMs = 10_000,

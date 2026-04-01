@@ -528,7 +528,7 @@ describe("WebSocket relay — integration tests", () => {
     expect(msg).toEqual({ type: "ended", reason: "user_ended" });
   });
 
-  test("waiting rooms expire with reason expired when their invite TTL elapses", async () => {
+  test("waiting rooms stay open after their original invite TTL elapses", async () => {
     const store = createTestStore();
     await store.createRoom({
       id: "WAIT01",
@@ -568,23 +568,22 @@ describe("WebSocket relay — integration tests", () => {
         `ws://localhost:${server.port}/rooms/WAIT01/ws?token=host-token-waiting`,
       );
       await waitForOpen(hostWs);
-      // Host no longer receives its own opening message on replay
-      const ended = await waitForMessage(hostWs);
-      expect(ended).toEqual({ type: "ended", reason: "expired" });
-      const close = await waitForClose(hostWs);
-      expect(close.reason).toBe("Room expired");
+      await Bun.sleep(100);
+      await expectNoMessage(hostWs);
 
       const room = await store.getRoom("WAIT01");
       expect(room).not.toBeNull();
-      expect(room!.status).toBe("expired");
+      expect(room!.status).toBe("waiting");
       expect(room!.close_reason).toBeNull();
+
+      hostWs.close();
     } finally {
       roomManager.cleanupRoom("WAIT01");
       server.stop(true);
     }
   });
 
-  test("host disconnect closes the active guest with reason disconnected", async () => {
+  test("host disconnect leaves the active guest connected and does not close the room", async () => {
     const hostWs = connectAs("host-token-123");
     await waitForOpen(hostWs);
 
@@ -593,21 +592,22 @@ describe("WebSocket relay — integration tests", () => {
     await waitForMessage(hostWs); // consume 'room_active'
     await waitForMessage(guestWs); // consume 'room_active'
 
-    const endedPromise = waitForMessage(guestWs);
-    const closePromise = waitForClose(guestWs);
     hostWs.close();
-    const ended = await endedPromise;
-    expect(ended).toEqual({ type: "ended", reason: "disconnected" });
-    const close = await closePromise;
-    expect(close.reason).toBe("disconnected");
+    await Bun.sleep(100);
+    await expectNoMessage(guestWs);
+    expect(guestWs.readyState).toBe(WebSocket.OPEN);
 
     const room = await store.getRoom("ROOM01");
     expect(room).not.toBeNull();
-    expect(room!.status).toBe("closed");
-    expect(room!.close_reason).toBe("disconnected");
+    expect(room!.status).toBe("active");
+    expect(room!.close_reason).toBeNull();
+    expect(room!.host_connected_at).toBeNull();
+    expect(room!.guest_connected_at).toEqual(expect.any(String));
+
+    guestWs.close();
   });
 
-  test("guest disconnect closes the active host with reason disconnected", async () => {
+  test("guest disconnect leaves the active host connected and does not close the room", async () => {
     const hostWs = connectAs("host-token-123");
     await waitForOpen(hostWs);
 
@@ -616,18 +616,19 @@ describe("WebSocket relay — integration tests", () => {
     await waitForMessage(hostWs); // consume 'room_active'
     await waitForMessage(guestWs); // consume 'room_active'
 
-    const endedPromise = waitForMessage(hostWs);
-    const closePromise = waitForClose(hostWs);
     guestWs.close();
-    const ended = await endedPromise;
-    expect(ended).toEqual({ type: "ended", reason: "disconnected" });
-    const close = await closePromise;
-    expect(close.reason).toBe("disconnected");
+    await Bun.sleep(100);
+    await expectNoMessage(hostWs);
+    expect(hostWs.readyState).toBe(WebSocket.OPEN);
 
     const room = await store.getRoom("ROOM01");
     expect(room).not.toBeNull();
-    expect(room!.status).toBe("closed");
-    expect(room!.close_reason).toBe("disconnected");
+    expect(room!.status).toBe("active");
+    expect(room!.close_reason).toBeNull();
+    expect(room!.host_connected_at).toEqual(expect.any(String));
+    expect(room!.guest_connected_at).toBeNull();
+
+    hostWs.close();
   });
 
   test("message size limit is enforced", async () => {
@@ -710,7 +711,7 @@ describe("WebSocket relay — integration tests", () => {
   });
 });
 
-describe("RoomManager timeouts", () => {
+describe("RoomManager durable lifecycle", () => {
   test("waiting rooms are tracked after the first helper connects", async () => {
     const store = createTestStore();
     await setupRoom(store);
@@ -744,7 +745,7 @@ describe("RoomManager timeouts", () => {
     }
   });
 
-  test("idle timeout is reset on message exchange", async () => {
+  test("message exchange keeps an active room alive", async () => {
     const store = createTestStore();
     await setupRoom(store);
     const roomManager = new RoomManager(store);
@@ -807,7 +808,7 @@ describe("RoomManager timeouts", () => {
     }
   });
 
-  test("idle timeout expires an active room with reason expired", async () => {
+  test("active rooms do not expire after an idle period", async () => {
     const store = createTestStore();
     await setupRoom(store);
     const roomManager = new RoomManager(store, { idleTimeoutMs: 50 });
@@ -840,21 +841,25 @@ describe("RoomManager timeouts", () => {
       await waitForMessage(hostWs); // consume 'room_active'
       await waitForMessage(guestWs); // consume 'room_active'
 
-      expect(await waitForMessage(hostWs)).toEqual({ type: "ended", reason: "expired" });
-      expect(await waitForMessage(guestWs)).toEqual({ type: "ended", reason: "expired" });
+      await Bun.sleep(100);
+      await expectNoMessage(hostWs);
+      await expectNoMessage(guestWs);
 
       const room = await store.getRoom("ROOM01");
       expect(room).not.toBeNull();
-      expect(room!.status).toBe("expired");
-      expect(room!.closed_at).toEqual(expect.any(String));
+      expect(room!.status).toBe("active");
+      expect(room!.closed_at).toBeNull();
       expect(room!.close_reason).toBeNull();
+
+      hostWs.close();
+      guestWs.close();
     } finally {
       roomManager.cleanupRoom("ROOM01");
       server.stop(true);
     }
   });
 
-  test("legacy joined rooms use idle expiry even before the second socket connects", async () => {
+  test("legacy joined rooms stay open even before the second socket connects", async () => {
     const store = createTestStore();
     await setupRoom(store);
     const roomManager = new RoomManager(store, { idleTimeoutMs: 50 });
@@ -880,11 +885,14 @@ describe("RoomManager timeouts", () => {
       );
       await waitForOpen(hostWs);
 
-      expect(await waitForMessage(hostWs)).toEqual({ type: "ended", reason: "expired" });
+      await Bun.sleep(100);
+      await expectNoMessage(hostWs);
 
       const room = await store.getRoom("ROOM01");
       expect(room).not.toBeNull();
-      expect(room!.status).toBe("expired");
+      expect(room!.status).toBe("active");
+
+      hostWs.close();
     } finally {
       roomManager.cleanupRoom("ROOM01");
       server.stop(true);
@@ -939,7 +947,7 @@ describe("RoomManager timeouts", () => {
     roomManager.cleanupRoom("WAIT10");
   });
 
-  test("claimed waiting rooms stay reusable after the only helper disconnects until invite expiry", async () => {
+  test("claimed waiting rooms stay reusable after the only helper disconnects", async () => {
     const store = createTestStore();
     await store.createRoom({
       id: "WAIT12",
@@ -995,7 +1003,7 @@ describe("RoomManager timeouts", () => {
     }
   });
 
-  test("expired waiting rooms do not activate even if both sockets connect", async () => {
+  test("waiting rooms still activate even if the original invite timestamp has passed", async () => {
     const store = createTestStore();
     await store.createRoom({
       id: "WAIT11",
@@ -1023,14 +1031,21 @@ describe("RoomManager timeouts", () => {
     await roomManager.addConnection("WAIT11", "host", host.ws);
     await roomManager.addConnection("WAIT11", "guest", guest.ws);
 
-    expect(host.sent).toEqual([{ type: "ended", reason: "expired" }]);
-    expect(guest.sent).toEqual([{ type: "ended", reason: "expired" }]);
-    expect(host.closed).toEqual([{ code: 1000, reason: "Room expired" }]);
-    expect(guest.closed).toEqual([{ code: 1000, reason: "Room expired" }]);
+    expect(host.sent).toEqual([{ type: "room_active", roomId: "WAIT11" }]);
+    expect(guest.sent).toMatchObject([
+      {
+        type: "message",
+        sender: "host",
+        content: "Opening context",
+      },
+      { type: "room_active", roomId: "WAIT11" },
+    ]);
+    expect(host.closed).toEqual([]);
+    expect(guest.closed).toEqual([]);
 
     const room = await store.getRoom("WAIT11");
     expect(room).not.toBeNull();
-    expect(room!.status).toBe("expired");
+    expect(room!.status).toBe("active");
     expect(guestClaim.role).toBe("guest");
   });
 });
@@ -1065,7 +1080,7 @@ describe("handleUpgrade — token validation", () => {
     expect(result!.status).toBe(410);
   });
 
-  test("rejects claimed waiting rooms after the original invite expiry has passed", async () => {
+  test("allows claimed waiting rooms to reconnect after the original invite expiry has passed", async () => {
     const store = createTestStore();
     await store.createRoom({
       id: "WAIT13",
@@ -1091,12 +1106,11 @@ describe("handleUpgrade — token validation", () => {
     const mockServer = { upgrade: () => true } as any;
     const req = new Request(`http://localhost/rooms/WAIT13/ws?token=${hostClaim.sessionToken}`);
     const result = await handleUpgrade(req, mockServer, store, roomManager);
-    expect(result).toBeInstanceOf(Response);
-    expect(result!.status).toBe(410);
+    expect(result).toBeUndefined();
 
     const room = await store.getRoom("WAIT13");
     expect(room).not.toBeNull();
-    expect(room!.status).toBe("expired");
+    expect(room!.status).toBe("waiting");
   });
 
   test("rejects duplicate-role attach with a deterministic 409 response", async () => {

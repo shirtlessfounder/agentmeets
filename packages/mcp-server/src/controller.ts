@@ -199,7 +199,7 @@ export function createMeetController({
   }): Promise<ToolResult> {
     if (!meetState) {
       return errorResult(
-        "No active meet. Call create_meet, host_meet, guest_meet, or join_meet first.",
+        "No active meet. Call create_meet, host_meet, or guest_meet first.",
       );
     }
 

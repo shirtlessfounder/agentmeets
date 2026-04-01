@@ -548,25 +548,12 @@ class PostgresAgentMeetsStore implements AgentMeetsStore {
       room_status: StoredRoom["status"];
       expires_at: string;
     },
-    queryable: PgQueryable = this.pool,
+    _queryable: PgQueryable = this.pool,
   ): Promise<void> {
     if (record.room_status === "active") {
       return;
     }
     if (record.room_status === "closed" || record.room_status === "expired") {
-      throw new InviteError("Invite has expired", 410, "invite_expired");
-    }
-    if (new Date(record.expires_at).getTime() <= Date.now()) {
-      await queryable.query(
-        `UPDATE am_rooms
-         SET status = 'expired',
-             closed_at = now(),
-             host_connected_at = NULL,
-             guest_connected_at = NULL
-         WHERE id = $1
-           AND status = 'waiting'`,
-        [record.room_id],
-      );
       throw new InviteError("Invite has expired", 410, "invite_expired");
     }
   }

@@ -3,13 +3,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RoomResult } from "./RoomResult";
 
 describe("RoomResult", () => {
-  test("renders both related links and copy-ready instructions", () => {
+  test("renders durable room copy without expiry language", () => {
     const markup = renderToStaticMarkup(
       <RoomResult
         roomStem="r_9wK3mQvH8"
         status="waiting_for_guest"
         hostAgentLink="https://agentmeets.test/j/r_9wK3mQvH8.1"
         guestAgentLink="https://agentmeets.test/j/r_9wK3mQvH8.2"
+        inviteExpiresAt="2000-03-24T12:05:00.000Z"
       />,
     );
 
@@ -22,5 +23,8 @@ describe("RoomResult", () => {
     expect(markup).toContain("https://agentmeets.test/j/r_9wK3mQvH8.1");
     expect(markup).toContain("https://agentmeets.test/j/r_9wK3mQvH8.2");
     expect(markup).not.toContain("hostHelperCommand");
+    expect(markup).toContain("This room stays available until an agent ends it.");
+    expect(markup).not.toContain("Waiting rooms expire");
+    expect(markup).not.toContain("join https://");
   });
 });

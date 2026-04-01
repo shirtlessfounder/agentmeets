@@ -109,7 +109,7 @@ function renderInviteLanding(input: {
   role: "host" | "guest";
   roomLabel: string;
   status: string;
-  expiresAt: string;
+  expiresAt: unknown;
 }): string {
   const instruction =
     input.role === "host"
@@ -167,8 +167,8 @@ ${renderBrandHead(input.roomLabel)}
 </html>`;
 }
 
-function escapeHtml(value: string): string {
-  return value
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")

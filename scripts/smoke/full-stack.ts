@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { Database } from "bun:sqlite";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
-  createSmokeDir,
+  readSmokeDatabaseUrl,
   startManagedProcess,
   waitForHttpReady,
 } from "./lib/process";
@@ -57,8 +56,7 @@ interface TrackedSocket {
 }
 
 async function main() {
-  const smokeDir = await createSmokeDir("agentmeets-smoke");
-  const databasePath = join(smokeDir, "agentmeets.db");
+  const databaseUrl = readSmokeDatabaseUrl();
   const serverBaseUrl = `http://127.0.0.1:${SERVER_PORT}`;
   const uiBaseUrl = `http://127.0.0.1:${UI_PORT}`;
 
@@ -68,7 +66,7 @@ async function main() {
     join(ROOT, "packages/server"),
     {
       PORT: String(SERVER_PORT),
-      DATABASE_PATH: databasePath,
+      DATABASE_URL: databaseUrl,
     },
   );
 
@@ -89,7 +87,6 @@ async function main() {
       await runSmokeScenarios({
         serverBaseUrl,
         uiBaseUrl,
-        databasePath,
       });
     } finally {
       await uiProcess.stop();
@@ -102,11 +99,9 @@ async function main() {
 async function runSmokeScenarios({
   serverBaseUrl,
   uiBaseUrl,
-  databasePath,
 }: {
   serverBaseUrl: string;
   uiBaseUrl: string;
-  databasePath: string;
 }) {
   const scenarios: Array<{
     name: string;
@@ -137,7 +132,7 @@ async function runSmokeScenarios({
       },
     },
     {
-      name: "public room payload returns waiting_for_join before any claim",
+      name: "public room payload returns waiting_for_both before any claim",
       run: async () => {
         const room = await createRoom(serverBaseUrl, {
           openingMessage: "Public room waiting state smoke.",
@@ -145,7 +140,7 @@ async function runSmokeScenarios({
         const publicRoom = await requestJson<PublicRoomResponse>(
           `${serverBaseUrl}/public/rooms/${room.roomStem}`,
         );
-        assert.equal(publicRoom.status, "waiting_for_join");
+        assert.equal(publicRoom.status, "waiting_for_both");
         assert.equal(publicRoom.roomId, room.roomId);
         assert.equal(publicRoom.roomStem, room.roomStem);
       },
@@ -160,7 +155,7 @@ async function runSmokeScenarios({
         );
         assert.equal(manifest.role, "guest");
         assert.equal(manifest.openingMessage, openingMessage);
-        assert.equal(manifest.status, "waiting_for_join");
+        assert.equal(manifest.status, "waiting_for_both");
         assert.ok(Date.parse(manifest.expiresAt) > Date.now());
       },
     },
@@ -328,7 +323,7 @@ async function runSmokeScenarios({
       },
     },
     {
-      name: "UI room page HTML contains both agent links and expiry copy",
+      name: "UI room page HTML contains both agent links and durable-room copy",
       run: async () => {
         const room = await createRoom(`${uiBaseUrl}/api`, {
           openingMessage: "UI room page smoke.",
@@ -339,7 +334,8 @@ async function runSmokeScenarios({
         const html = await response.text();
         assert.match(html, new RegExp(escapeRegExp(room.hostAgentLink)));
         assert.match(html, new RegExp(escapeRegExp(room.guestAgentLink)));
-        assert.match(html, /Waiting rooms expire (at|after)/);
+        assert.match(html, /stays available until an agent ends it/i);
+        assert.doesNotMatch(html, /Waiting rooms expire (at|after)/);
       },
     },
     {
@@ -358,77 +354,97 @@ async function runSmokeScenarios({
       },
     },
     {
-      name: "expired waiting room returns 410 from /public/rooms/:roomStem and /j/:token",
+      name: "waiting room stays available after the original invite timestamp elapses",
       run: async () => {
         const room = await createRoom(serverBaseUrl, {
-          openingMessage: "Waiting expiry smoke.",
+          openingMessage: "Waiting durability smoke.",
           inviteTtlSeconds: 1,
         });
 
         await Bun.sleep(1_100);
 
-        const publicResponse = await fetch(`${serverBaseUrl}/public/rooms/${room.roomStem}`);
-        const manifestResponse = await fetch(
+        const publicRoom = await requestJson<PublicRoomResponse>(
+          `${serverBaseUrl}/public/rooms/${room.roomStem}`,
+        );
+        const manifest = await requestJson<InviteManifestResponse>(
           `${serverBaseUrl}/j/${extractInviteToken(room.guestAgentLink)}`,
         );
 
-        assert.equal(publicResponse.status, 410);
-        assert.deepEqual(await publicResponse.json(), { error: "room_expired" });
-        assert.equal(manifestResponse.status, 410);
-        assert.deepEqual(await manifestResponse.json(), { error: "invite_expired" });
+        assert.equal(publicRoom.status, "waiting_for_both");
+        assert.equal(publicRoom.roomId, room.roomId);
+        assert.equal(manifest.status, "waiting_for_both");
+        assert.equal(manifest.roomId, room.roomId);
       },
     },
     {
-      name: "claimed room expires after disconnect plus idle timeout once the fix lands",
+      name: "claimed room survives disconnect and reconnect",
       run: async () => {
         const room = await createRoom(serverBaseUrl, {
-          openingMessage: "Claim once, disconnect, then expire.",
+          openingMessage: "Claim, disconnect, reconnect, continue.",
         });
-        const hostToken = extractInviteToken(room.hostAgentLink);
         const hostClaim = await claimInvite(
           serverBaseUrl,
-          hostToken,
-          "claimed-disconnect-expiry-host",
+          extractInviteToken(room.hostAgentLink),
+          "claimed-reconnect-host",
+        );
+        const guestClaim = await claimInvite(
+          serverBaseUrl,
+          extractInviteToken(room.guestAgentLink),
+          "claimed-reconnect-guest",
         );
 
         const hostSocket = connectRoomSocket(serverBaseUrl, room.roomId, hostClaim.sessionToken);
-        await waitForWsOpen(hostSocket.ws);
-        hostSocket.close();
+        const guestSocket = connectRoomSocket(serverBaseUrl, room.roomId, guestClaim.sessionToken);
 
-        await Bun.sleep(100);
-
-        const db = new Database(databasePath);
         try {
-          db.prepare(`UPDATE rooms SET last_activity_at = ? WHERE id = ?`).run(
-            new Date(Date.now() - 11 * 60 * 1000).toISOString(),
-            room.roomId,
+          await waitForWsOpen(hostSocket.ws);
+          const hostReplay = await hostSocket.nextEvent();
+          assert.equal(hostReplay.type, "message");
+
+          await waitForWsOpen(guestSocket.ws);
+          const guestReplay = await guestSocket.nextEvent();
+          assert.equal(guestReplay.type, "message");
+
+          const hostActive = await hostSocket.nextEvent();
+          const guestActive = await guestSocket.nextEvent();
+          assert.equal(hostActive.type, "room_active");
+          assert.equal(guestActive.type, "room_active");
+
+          hostSocket.close();
+          await Bun.sleep(100);
+
+          const publicRoomAfterDisconnect = await requestJson<PublicRoomResponse>(
+            `${serverBaseUrl}/public/rooms/${room.roomStem}`,
           );
+          assert.equal(publicRoomAfterDisconnect.status, "waiting_for_host");
+
+          const reconnectedHost = connectRoomSocket(
+            serverBaseUrl,
+            room.roomId,
+            hostClaim.sessionToken,
+          );
+          try {
+            await waitForWsOpen(reconnectedHost.ws);
+            const replayedHostMessage = await reconnectedHost.nextEvent();
+            assert.equal(replayedHostMessage.type, "message");
+
+            reconnectedHost.ws.send(JSON.stringify({
+              type: "message",
+              clientMessageId: "smoke-reconnect-host",
+              replyToMessageId: null,
+              content: "Still connected after reconnect.",
+            }));
+
+            const hostAck = await reconnectedHost.nextEvent();
+            const guestMessage = await guestSocket.nextEvent();
+            assert.equal(hostAck.type, "ack");
+            assert.equal(guestMessage.type, "message");
+            assert.equal(guestMessage.content, "Still connected after reconnect.");
+          } finally {
+            reconnectedHost.close();
+          }
         } finally {
-          db.close();
-        }
-
-        const wsUpgradeResponse = await fetch(
-          `${serverBaseUrl}/rooms/${room.roomId}/ws?token=${hostClaim.sessionToken}`,
-        );
-        assert.equal(wsUpgradeResponse.status, 410);
-
-        const manifestResponse = await fetch(`${serverBaseUrl}/j/${hostToken}`);
-        const publicResponse = await fetch(`${serverBaseUrl}/public/rooms/${room.roomStem}`);
-
-        assert.equal(manifestResponse.status, 410);
-        assert.deepEqual(await manifestResponse.json(), { error: "invite_expired" });
-        assert.equal(publicResponse.status, 410);
-        assert.deepEqual(await publicResponse.json(), { error: "room_expired" });
-
-        const verifyDb = new Database(databasePath, { readonly: true });
-        try {
-          const row = verifyDb
-            .prepare(`SELECT status, closed_at FROM rooms WHERE id = ?`)
-            .get(room.roomId) as { status: string; closed_at: string | null };
-          assert.equal(row.status, "expired");
-          assert.ok(row.closed_at);
-        } finally {
-          verifyDb.close();
+          guestSocket.close();
         }
       },
     },

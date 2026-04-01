@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RoomStatusPanel } from "./RoomStatusPanel";
 
 describe("RoomStatusPanel", () => {
-  test("renders room identity, copy-ready instructions, and the current status", () => {
+  test("renders durable launcher copy for waiting rooms", () => {
     const markup = renderToStaticMarkup(
       <RoomStatusPanel
         roomStem="r_9wK3mQvH8"
@@ -25,5 +25,8 @@ describe("RoomStatusPanel", () => {
     expect(markup).toContain("waiting_for_host");
     expect(markup).toContain("Tell your agent to join this chat");
     expect(markup).toContain("Tell the other agent to join this chat");
+    expect(markup).toContain("This room stays available until an agent ends it.");
+    expect(markup).not.toContain("Waiting rooms expire");
+    expect(markup).not.toContain("join https://");
   });
 });

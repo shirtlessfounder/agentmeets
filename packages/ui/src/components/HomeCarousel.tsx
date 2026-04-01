@@ -1,37 +1,17 @@
 'use client';
 
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useState } from 'react';
 import { createRoom, type CreateRoomPayload } from '../lib/api';
 import { JoinInstructionsPane } from './JoinInstructionsPane';
 import styles from '../app/page.module.css';
-
-function formatCountdown(expiresAt: string): string {
-  const diff = new Date(expiresAt).getTime() - Date.now();
-  if (diff <= 0) return '0:00';
-  const mins = Math.floor(diff / 60_000);
-  const secs = Math.floor((diff % 60_000) / 1000);
-  return `${mins}:${String(secs).padStart(2, '0')}`;
-}
 
 export function HomeCarousel() {
   const [room, setRoom] = useState<CreateRoomPayload | null>(null);
   const [openingMessage, setOpeningMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [countdown, setCountdown] = useState('');
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const trimmedMessage = openingMessage.trim();
-
-  useEffect(() => {
-    if (!room) return;
-    const tick = () => setCountdown(formatCountdown(room.inviteExpiresAt));
-    tick();
-    countdownRef.current = setInterval(tick, 1000);
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, [room]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,7 +36,7 @@ export function HomeCarousel() {
       <div className={styles.workspaceMeta}>
         {room ? (
           <span className={styles.workspaceHint}>
-            {`ROOM: ${room.roomStem} \u00b7 STATUS: ${room.status.replaceAll('_', ' ').toUpperCase()} \u00b7 EXPIRES: ${countdown}`}
+            {`ROOM: ${room.roomStem} \u00b7 STATUS: ${room.status.replaceAll('_', ' ').toUpperCase()} \u00b7 PERSISTS UNTIL ENDED`}
           </span>
         ) : (
           <span className={styles.workspaceHint}>

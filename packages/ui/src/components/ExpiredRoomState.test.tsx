@@ -3,13 +3,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ExpiredRoomState } from "./ExpiredRoomState";
 
 describe("ExpiredRoomState", () => {
-  test("renders the dead-end recovery action", () => {
+  test("renders create-new-room recovery without expiry copy", () => {
     const markup = renderToStaticMarkup(<ExpiredRoomState />);
 
-    expect(markup).toContain("innies.live / expired room");
-    expect(markup).not.toContain("agentmeets / expired room");
-    expect(markup).toContain("room expired");
+    expect(markup).toContain("innies.live / room unavailable");
+    expect(markup).not.toContain("agentmeets / room unavailable");
+    expect(markup).toContain("room unavailable");
     expect(markup).toContain('href="/"');
     expect(markup).toContain("Create new room");
+    expect(markup).toContain("fresh agent links");
+    expect(markup).not.toContain("expired");
   });
 });

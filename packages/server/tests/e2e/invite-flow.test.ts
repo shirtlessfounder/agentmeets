@@ -66,6 +66,22 @@ function waitForMessage(ws: WebSocket): Promise<ServerMessage> {
   });
 }
 
+function expectNoMessage(ws: WebSocket, durationMs = 100): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onMessage = () => {
+      clearTimeout(timeout);
+      reject(new Error("Unexpected message"));
+    };
+
+    const timeout = setTimeout(() => {
+      ws.removeEventListener("message", onMessage);
+      resolve();
+    }, durationMs);
+
+    ws.addEventListener("message", onMessage, { once: true });
+  });
+}
+
 beforeEach(async () => {
   store = createFakeAgentMeetsStore();
   app = await buildApp();
@@ -97,7 +113,7 @@ afterEach(() => {
 });
 
 describe("invite flow", () => {
-  test("create room -> inspect manifest -> claim invite -> activate over websockets", async () => {
+  test("create room -> inspect manifest -> claim invite -> activate over websockets -> reconnect without ending the room", async () => {
     const baseUrl = `http://localhost:${port}`;
 
     const createResponse = await fetch(`${baseUrl}/rooms`, {
@@ -118,7 +134,7 @@ describe("invite flow", () => {
         /\/j\/[A-Za-z0-9]{10}\.2$/,
       ),
       inviteExpiresAt: expect.any(String),
-      status: "waiting_for_both",
+      status: "waiting_for_join",
     });
 
     const hostInviteToken = new URL(created.hostAgentLink).pathname.split("/").pop()!;
@@ -209,6 +225,72 @@ describe("invite flow", () => {
     expect(activatedRoomRow!.status).toBe("active");
 
     hostWs.close();
+    await Bun.sleep(75);
+    await expectNoMessage(guestWs);
+
+    const roomAfterDisconnect = await store.getRoom(created.roomId);
+    expect(roomAfterDisconnect).not.toBeNull();
+    expect(roomAfterDisconnect!.status).toBe("active");
+    expect(roomAfterDisconnect!.close_reason).toBeNull();
+    expect(roomAfterDisconnect!.host_connected_at).toBeNull();
+    expect(roomAfterDisconnect!.guest_connected_at).toEqual(expect.any(String));
+
+    const reconnectedHost = new WebSocket(
+      `ws://localhost:${port}/rooms/${created.roomId}/ws?token=${hostClaim.sessionToken}`,
+    );
+    await waitForOpen(reconnectedHost);
+    await expectNoMessage(reconnectedHost);
+
+    const hostAckPromise = waitForMessage(reconnectedHost);
+    const guestMessagePromise = waitForMessage(guestWs);
+    reconnectedHost.send(
+      JSON.stringify({
+        type: "message",
+        clientMessageId: "reconnect-host-1",
+        replyToMessageId: null,
+        content: "Still here after reconnect.",
+      }),
+    );
+
+    expect(await hostAckPromise).toMatchObject({
+      type: "ack",
+      clientMessageId: "reconnect-host-1",
+    });
+    expect(await guestMessagePromise).toMatchObject({
+      type: "message",
+      sender: "host",
+      content: "Still here after reconnect.",
+    });
+
+    const guestAckPromise = waitForMessage(guestWs);
+    const hostMessagePromise = waitForMessage(reconnectedHost);
+    guestWs.send(
+      JSON.stringify({
+        type: "message",
+        clientMessageId: "reconnect-guest-1",
+        replyToMessageId: null,
+        content: "Welcome back.",
+      }),
+    );
+
+    expect(await guestAckPromise).toMatchObject({
+      type: "ack",
+      clientMessageId: "reconnect-guest-1",
+    });
+    expect(await hostMessagePromise).toMatchObject({
+      type: "message",
+      sender: "guest",
+      content: "Welcome back.",
+    });
+
+    const roomAfterReconnect = await store.getRoom(created.roomId);
+    expect(roomAfterReconnect).not.toBeNull();
+    expect(roomAfterReconnect!.status).toBe("active");
+    expect(roomAfterReconnect!.close_reason).toBeNull();
+    expect(roomAfterReconnect!.host_connected_at).toEqual(expect.any(String));
+    expect(roomAfterReconnect!.guest_connected_at).toEqual(expect.any(String));
+
+    reconnectedHost.close();
     guestWs.close();
   });
 
@@ -223,42 +305,15 @@ describe("invite flow", () => {
       error: "invite_not_found",
     });
 
-    const createResponse = await fetch(`${baseUrl}/rooms`, {
+    const missingClaim = await fetch(`${baseUrl}/invites/not-a-real-invite/claim`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        openingMessage: "This invite should expire before bootstrap.",
-        inviteTtlSeconds: 1,
-      }),
+      headers: { "Idempotency-Key": "missing-bootstrap-claim" },
     });
-    expect(createResponse.status).toBe(201);
-
-    const created = (await createResponse.json()) as {
-      roomId: string;
-      hostAgentLink: string;
-      guestAgentLink: string;
-    };
-    const guestInviteToken = new URL(created.guestAgentLink).pathname.split("/").pop()!;
-
-    await Bun.sleep(1_100);
-
-    const expiredManifest = await fetch(`${baseUrl}/j/${guestInviteToken}`);
-    expect(expiredManifest.status).toBe(410);
-    expect(expiredManifest.headers.get("content-type")).toContain("application/json");
-    expect(expiredManifest.headers.get("location")).toBeNull();
-    expect(await expiredManifest.json()).toEqual({
-      error: "invite_expired",
-    });
-
-    const expiredClaim = await fetch(`${baseUrl}/invites/${guestInviteToken}/claim`, {
-      method: "POST",
-      headers: { "Idempotency-Key": "expired-bootstrap-claim" },
-    });
-    expect(expiredClaim.status).toBe(410);
-    expect(expiredClaim.headers.get("content-type")).toContain("application/json");
-    expect(expiredClaim.headers.get("location")).toBeNull();
-    expect(await expiredClaim.json()).toEqual({
-      error: "invite_expired",
+    expect(missingClaim.status).toBe(404);
+    expect(missingClaim.headers.get("content-type")).toContain("application/json");
+    expect(missingClaim.headers.get("location")).toBeNull();
+    expect(await missingClaim.json()).toEqual({
+      error: "invite_not_found",
     });
   });
 });
